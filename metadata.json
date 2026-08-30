@@ -1,0 +1,7 @@
+{
+  "name": "FlowBoard",
+  "description": "Visual planning workspace connecting canvas brainstorming with deadline-based calendar planning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

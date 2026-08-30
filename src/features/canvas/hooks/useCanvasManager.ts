@@ -1,0 +1,281 @@
+import * as React from "react";
+import { CanvasWorkspace } from "@/src/types";
+import {
+  loadCanvasesFromStorage,
+  saveCanvasesToStorage,
+  loadCurrentCanvasIdFromStorage,
+  saveCurrentCanvasIdToStorage,
+  createNewCanvas,
+  cleanAppStateForStorage,
+  MAX_CANVASES,
+  MIN_CANVASES,
+} from "@/src/features/canvas/utils/canvasStorage";
+import { unlinkTasksForCanvas } from "@/src/features/calendar/utils/taskStorage";
+
+export type SaveStatus = "saved" | "saving";
+
+export function useCanvasManager(initialSelectedId?: string) {
+  const [canvases, setCanvases] = React.useState<CanvasWorkspace[]>(() => {
+    return loadCanvasesFromStorage();
+  });
+
+  const [activeCanvasId, setActiveCanvasId] = React.useState<string>(() => {
+    const loadedCanvases = loadCanvasesFromStorage();
+    const validIds = loadedCanvases.map((c) => c.id);
+    if (initialSelectedId && validIds.includes(initialSelectedId)) {
+      return initialSelectedId;
+    }
+    return loadCurrentCanvasIdFromStorage(validIds);
+  });
+
+  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("saved");
+
+  // Keep latest refs for debounce / scene saving
+  const activeCanvasIdRef = React.useRef(activeCanvasId);
+  activeCanvasIdRef.current = activeCanvasId;
+
+  const canvasesRef = React.useRef(canvases);
+  canvasesRef.current = canvases;
+
+  const pendingSceneRef = React.useRef<{
+    elements: readonly any[];
+    appState: Record<string, any>;
+    files: Record<string, any>;
+  } | null>(null);
+
+  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const isProgrammaticUpdateRef = React.useRef(false);
+
+  // Sync active canvas ID across storage when changed
+  React.useEffect(() => {
+    saveCurrentCanvasIdToStorage(activeCanvasId);
+  }, [activeCanvasId]);
+
+  // Flush any pending changes to localStorage
+  const flushCurrentScene = React.useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (pendingSceneRef.current) {
+      const currentId = activeCanvasIdRef.current;
+      const updatedCanvases = canvasesRef.current.map((c) => {
+        if (c.id === currentId) {
+          return {
+            ...c,
+            sceneData: {
+              elements: pendingSceneRef.current?.elements || [],
+              appState: cleanAppStateForStorage(pendingSceneRef.current?.appState),
+              files: pendingSceneRef.current?.files || {},
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return c;
+      });
+
+      setCanvases(updatedCanvases);
+      saveCanvasesToStorage(updatedCanvases);
+      pendingSceneRef.current = null;
+      setSaveStatus("saved");
+    }
+  }, []);
+
+  // Handle scene change from Excalidraw onChange
+  const handleSceneChange = React.useCallback(
+    (elements: readonly any[], appState: any, files: any) => {
+      if (isProgrammaticUpdateRef.current) {
+        return;
+      }
+
+      pendingSceneRef.current = {
+        elements,
+        appState,
+        files,
+      };
+
+      setSaveStatus("saving");
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      debounceTimerRef.current = setTimeout(() => {
+        flushCurrentScene();
+      }, 700);
+    },
+    [flushCurrentScene]
+  );
+
+  // Switch to another canvas
+  const switchCanvas = React.useCallback(
+    (targetCanvasId: string, excalidrawAPI?: any) => {
+      if (targetCanvasId === activeCanvasIdRef.current) return;
+
+      // 1. Flush current scene to storage
+      flushCurrentScene();
+
+      // 2. Locate target canvas
+      const target = canvasesRef.current.find((c) => c.id === targetCanvasId);
+      if (!target) return;
+
+      // 3. Mark update as programmatic to avoid immediate change loop
+      isProgrammaticUpdateRef.current = true;
+      activeCanvasIdRef.current = targetCanvasId;
+      setActiveCanvasId(targetCanvasId);
+      saveCurrentCanvasIdToStorage(targetCanvasId);
+
+      // 4. Update Excalidraw scene if API is available
+      if (excalidrawAPI) {
+        const sceneData = target.sceneData;
+        excalidrawAPI.updateScene({
+          elements: sceneData?.elements || [],
+          appState: {
+            ...cleanAppStateForStorage(sceneData?.appState),
+            theme: "dark",
+          },
+          files: sceneData?.files || {},
+        });
+        if (excalidrawAPI.history?.clear) {
+          excalidrawAPI.history.clear();
+        }
+      }
+
+      setTimeout(() => {
+        isProgrammaticUpdateRef.current = false;
+      }, 150);
+    },
+    [flushCurrentScene]
+  );
+
+  // Create a new canvas
+  const createCanvas = React.useCallback(
+    (excalidrawAPI?: any) => {
+      if (canvasesRef.current.length >= MAX_CANVASES) {
+        return null;
+      }
+
+      // Flush current scene before adding
+      flushCurrentScene();
+
+      const newCanvas = createNewCanvas("Untitled Canvas");
+      const updatedCanvases = [...canvasesRef.current, newCanvas];
+
+      canvasesRef.current = updatedCanvases;
+      setCanvases(updatedCanvases);
+      saveCanvasesToStorage(updatedCanvases);
+
+      // Switch to the newly created canvas
+      isProgrammaticUpdateRef.current = true;
+      activeCanvasIdRef.current = newCanvas.id;
+      setActiveCanvasId(newCanvas.id);
+      saveCurrentCanvasIdToStorage(newCanvas.id);
+
+      if (excalidrawAPI) {
+        excalidrawAPI.updateScene({
+          elements: [],
+          appState: {
+            viewBackgroundColor: "#141416",
+            theme: "dark",
+          },
+          files: {},
+        });
+        if (excalidrawAPI.history?.clear) {
+          excalidrawAPI.history.clear();
+        }
+      }
+
+      setTimeout(() => {
+        isProgrammaticUpdateRef.current = false;
+      }, 150);
+
+      return newCanvas;
+    },
+    [flushCurrentScene]
+  );
+
+  // Rename a canvas
+  const renameCanvas = React.useCallback((id: string, newTitle: string) => {
+    const trimmed = newTitle.trim() || "Untitled Canvas";
+    setCanvases((prev) => {
+      const updated = prev.map((c) =>
+        c.id === id ? { ...c, title: trimmed, updatedAt: new Date().toISOString() } : c
+      );
+      saveCanvasesToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  // Delete a canvas
+  const deleteCanvas = React.useCallback(
+    (id: string, excalidrawAPI?: any) => {
+      if (canvasesRef.current.length <= MIN_CANVASES) {
+        return; // Cannot delete last canvas
+      }
+
+      // Unlink any tasks associated with this deleted canvas
+      unlinkTasksForCanvas(id);
+
+      // If deleting the active canvas, determine next active canvas
+      const currentId = activeCanvasIdRef.current;
+      const updated = canvasesRef.current.filter((c) => c.id !== id);
+
+      canvasesRef.current = updated;
+      setCanvases(updated);
+      saveCanvasesToStorage(updated);
+
+      if (currentId === id) {
+        const nextActive = updated[0];
+        if (nextActive) {
+          isProgrammaticUpdateRef.current = true;
+          activeCanvasIdRef.current = nextActive.id;
+          setActiveCanvasId(nextActive.id);
+          saveCurrentCanvasIdToStorage(nextActive.id);
+
+          if (excalidrawAPI) {
+            const sceneData = nextActive.sceneData;
+            excalidrawAPI.updateScene({
+              elements: sceneData?.elements || [],
+              appState: {
+                ...cleanAppStateForStorage(sceneData?.appState),
+                theme: "dark",
+              },
+              files: sceneData?.files || {},
+            });
+            if (excalidrawAPI.history?.clear) {
+              excalidrawAPI.history.clear();
+            }
+          }
+
+          setTimeout(() => {
+            isProgrammaticUpdateRef.current = false;
+          }, 150);
+        }
+      }
+    },
+    []
+  );
+
+  const activeCanvas = React.useMemo(() => {
+    return (
+      canvases.find((c) => c.id === activeCanvasId) ||
+      canvases[0] ||
+      createNewCanvas("Untitled Canvas")
+    );
+  }, [canvases, activeCanvasId]);
+
+  return {
+    canvases,
+    activeCanvas,
+    activeCanvasId,
+    saveStatus,
+    handleSceneChange,
+    switchCanvas,
+    createCanvas,
+    renameCanvas,
+    deleteCanvas,
+    flushCurrentScene,
+    isProgrammaticUpdateRef,
+  };
+}
