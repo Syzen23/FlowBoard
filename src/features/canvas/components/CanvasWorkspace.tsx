@@ -19,6 +19,10 @@ import {
   createScenePayload,
   hasFlowBoardCanvasBackground,
 } from "@/src/features/canvas/adapters/canvasSceneAdapter";
+import type {
+  FlowBoardExcalidrawAPI,
+  FlowBoardInitialScene,
+} from "@/src/features/canvas/types";
 
 interface CanvasWorkspaceProps {
   onModeChange: (mode: RouteMode) => void;
@@ -32,7 +36,7 @@ export function CanvasWorkspace({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
-  const [excalidrawAPI, setExcalidrawAPI] = React.useState<any>(null);
+  const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
 
   const {
     canvases,
@@ -84,7 +88,7 @@ export function CanvasWorkspace({
           key={activeCanvas.id}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
-          initialData={createScenePayload(activeCanvas.sceneData) as any}
+          initialData={createScenePayload(activeCanvas.sceneData) as FlowBoardInitialScene}
           onChange={(elements, appState, files) => {
             const flowBoardAppState = createFlowBoardAppState(appState);
 

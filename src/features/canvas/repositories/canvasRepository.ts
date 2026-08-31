@@ -1,4 +1,4 @@
-import { CanvasWorkspace } from "@/src/types";
+import type { CanvasWorkspace } from "@/src/types";
 import {
   CANVAS_BOARD_BACKGROUND,
   CANVAS_DEFAULT_FILL_COLOR,

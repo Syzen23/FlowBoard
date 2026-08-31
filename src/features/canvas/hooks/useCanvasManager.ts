@@ -11,6 +11,12 @@ import {
   createFlowBoardAppState,
   normalizeSceneForStorage,
 } from "@/src/features/canvas/adapters/canvasSceneAdapter";
+import type {
+  FlowBoardCanvasAppState,
+  FlowBoardCanvasElement,
+  FlowBoardCanvasFiles,
+  FlowBoardExcalidrawAPI,
+} from "@/src/features/canvas/types";
 
 export type SaveStatus = "saved" | "saving";
 
@@ -38,9 +44,9 @@ export function useCanvasManager(initialSelectedId?: string) {
   canvasesRef.current = canvases;
 
   const pendingSceneRef = React.useRef<{
-    elements: readonly any[];
-    appState: Record<string, any>;
-    files: Record<string, any>;
+    elements: readonly FlowBoardCanvasElement[];
+    appState: FlowBoardCanvasAppState;
+    files: FlowBoardCanvasFiles;
   } | null>(null);
 
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -84,7 +90,11 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   // Handle scene change from Excalidraw onChange
   const handleSceneChange = React.useCallback(
-    (elements: readonly any[], appState: any, files: any) => {
+    (
+      elements: readonly FlowBoardCanvasElement[],
+      appState: FlowBoardCanvasAppState,
+      files: FlowBoardCanvasFiles
+    ) => {
       if (isProgrammaticUpdateRef.current) {
         return;
       }
@@ -110,7 +120,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   // Switch to another canvas
   const switchCanvas = React.useCallback(
-    (targetCanvasId: string, excalidrawAPI?: any) => {
+    (targetCanvasId: string, excalidrawAPI?: FlowBoardExcalidrawAPI | null) => {
       if (targetCanvasId === activeCanvasIdRef.current) return;
 
       // 1. Flush current scene to storage
@@ -140,7 +150,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   // Create a new canvas
   const createCanvas = React.useCallback(
-    (excalidrawAPI?: any) => {
+    (excalidrawAPI?: FlowBoardExcalidrawAPI | null) => {
       if (canvasesRef.current.length >= MAX_CANVASES) {
         return null;
       }
@@ -192,7 +202,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   // Delete a canvas
   const deleteCanvas = React.useCallback(
-    (id: string, excalidrawAPI?: any) => {
+    (id: string, excalidrawAPI?: FlowBoardExcalidrawAPI | null) => {
       if (canvasesRef.current.length <= MIN_CANVASES) {
         return; // Cannot delete last canvas
       }

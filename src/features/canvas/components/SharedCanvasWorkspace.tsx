@@ -12,6 +12,13 @@ import {
   hasFlowBoardCanvasBackground,
   normalizeSceneForStorage,
 } from "@/src/features/canvas/adapters/canvasSceneAdapter";
+import type {
+  FlowBoardCanvasAppState,
+  FlowBoardCanvasElement,
+  FlowBoardCanvasFiles,
+  FlowBoardExcalidrawAPI,
+  FlowBoardInitialScene,
+} from "@/src/features/canvas/types";
 
 interface SharedCanvasWorkspaceProps {
   canvasId: string;
@@ -33,7 +40,7 @@ export function SharedCanvasWorkspace({
     return shareRepository.getByCanvasId(canvasId);
   }, [canvasId]);
 
-  const [excalidrawAPI, setExcalidrawAPI] = React.useState<any>(null);
+  const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
 
   // Determine effective permission
   const isPrivate = shareSetting.permission === "private";
@@ -50,15 +57,17 @@ export function SharedCanvasWorkspace({
   // Stable initial data for Excalidraw - created ONCE per canvas / viewMode
   const initialData = React.useMemo(() => {
     if (!targetCanvas) return null;
-    return createScenePayload(targetCanvas.sceneData, { viewModeEnabled: isViewOnly });
+    return createScenePayload(targetCanvas.sceneData, {
+      viewModeEnabled: isViewOnly,
+    }) as FlowBoardInitialScene;
   }, [canvasId, isViewOnly, targetCanvas]);
 
   // Refs for debounced storage saving in Edit mode without triggering React re-renders
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const pendingSceneRef = React.useRef<{
-    elements: readonly any[];
-    appState: any;
-    files: any;
+    elements: readonly FlowBoardCanvasElement[];
+    appState: FlowBoardCanvasAppState;
+    files: FlowBoardCanvasFiles;
   } | null>(null);
 
   const flushSceneToStorage = React.useCallback(() => {
@@ -105,7 +114,11 @@ export function SharedCanvasWorkspace({
 
   // Debounced scene change handler (zero React state updates during drawing)
   const handleSceneChange = React.useCallback(
-    (elements: readonly any[], appState: any, files: any) => {
+    (
+      elements: readonly FlowBoardCanvasElement[],
+      appState: FlowBoardCanvasAppState,
+      files: FlowBoardCanvasFiles
+    ) => {
       if (isViewOnly) return;
 
       const flowBoardAppState = createFlowBoardAppState(appState);

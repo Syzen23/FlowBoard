@@ -1,4 +1,4 @@
-import { CanvasWorkspace } from "@/src/types";
+import type { CanvasWorkspace } from "@/src/types";
 
 export const STORAGE_KEY_CANVASES = "flowboard_canvases";
 export const STORAGE_KEY_CURRENT_CANVAS = "flowboard_current_canvas";
@@ -99,53 +99,57 @@ export function saveCurrentCanvasIdToStorage(id: string): void {
   }
 }
 
-export function cleanAppStateForStorage(appState: any): Record<string, any> {
-  const cleaned: Record<string, any> = {
+export function cleanAppStateForStorage(appState: unknown): Record<string, unknown> {
+  const appStateRecord = isRecord(appState) ? appState : undefined;
+  const cleaned: Record<string, unknown> = {
     viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-    currentItemStrokeColor: normalizeToolStrokeColor(appState?.currentItemStrokeColor),
+    currentItemStrokeColor: normalizeToolStrokeColor(appStateRecord?.currentItemStrokeColor),
     currentItemBackgroundColor:
-      typeof appState?.currentItemBackgroundColor === "string"
-        ? appState.currentItemBackgroundColor
+      typeof appStateRecord?.currentItemBackgroundColor === "string"
+        ? appStateRecord.currentItemBackgroundColor
         : CANVAS_DEFAULT_FILL_COLOR,
   };
 
-  if (!appState) return cleaned;
+  if (!appStateRecord) return cleaned;
 
   if (
-    appState.zoom &&
-    typeof appState.zoom === "object" &&
-    typeof appState.zoom.value === "number"
+    isRecord(appStateRecord.zoom) &&
+    typeof appStateRecord.zoom.value === "number"
   ) {
-    cleaned.zoom = appState.zoom;
+    cleaned.zoom = appStateRecord.zoom;
   }
 
-  if (typeof appState.scrollX === "number") {
-    cleaned.scrollX = appState.scrollX;
+  if (typeof appStateRecord.scrollX === "number") {
+    cleaned.scrollX = appStateRecord.scrollX;
   }
 
-  if (typeof appState.scrollY === "number") {
-    cleaned.scrollY = appState.scrollY;
+  if (typeof appStateRecord.scrollY === "number") {
+    cleaned.scrollY = appStateRecord.scrollY;
   }
 
-  if (typeof appState.gridSize === "number") {
-    cleaned.gridSize = appState.gridSize;
+  if (typeof appStateRecord.gridSize === "number") {
+    cleaned.gridSize = appStateRecord.gridSize;
   }
 
-  if (typeof appState.currentItemRoughness === "number") {
-    cleaned.currentItemRoughness = appState.currentItemRoughness;
+  if (typeof appStateRecord.currentItemRoughness === "number") {
+    cleaned.currentItemRoughness = appStateRecord.currentItemRoughness;
   }
 
-  if (typeof appState.currentItemOpacity === "number") {
-    cleaned.currentItemOpacity = appState.currentItemOpacity;
+  if (typeof appStateRecord.currentItemOpacity === "number") {
+    cleaned.currentItemOpacity = appStateRecord.currentItemOpacity;
   }
 
-  if (typeof appState.currentItemFontFamily === "number") {
-    cleaned.currentItemFontFamily = appState.currentItemFontFamily;
+  if (typeof appStateRecord.currentItemFontFamily === "number") {
+    cleaned.currentItemFontFamily = appStateRecord.currentItemFontFamily;
   }
 
-  if (typeof appState.currentItemFontSize === "number") {
-    cleaned.currentItemFontSize = appState.currentItemFontSize;
+  if (typeof appStateRecord.currentItemFontSize === "number") {
+    cleaned.currentItemFontSize = appStateRecord.currentItemFontSize;
   }
 
   return cleaned;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

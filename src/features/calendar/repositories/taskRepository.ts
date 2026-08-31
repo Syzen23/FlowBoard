@@ -1,4 +1,4 @@
-import { Task, TaskStatus } from "@/src/types";
+import type { Task, TaskStatus } from "@/src/types";
 import {
   TASKS_UPDATED_EVENT,
   addTaskToStorage,

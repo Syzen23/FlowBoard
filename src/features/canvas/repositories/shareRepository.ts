@@ -1,4 +1,4 @@
-import { CanvasShareSetting, SharePermission } from "@/src/types";
+import type { CanvasShareSetting, SharePermission } from "@/src/types";
 import {
   SHARE_SETTINGS_UPDATED_EVENT,
   buildShareUrl,
