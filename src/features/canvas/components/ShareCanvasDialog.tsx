@@ -8,12 +8,7 @@ import {
   DialogDescription,
 } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
-import { SharePermission } from "@/src/types";
-import {
-  getCanvasShareSetting,
-  saveCanvasShareSetting,
-  buildShareUrl,
-} from "@/src/features/canvas/utils/shareStorage";
+import { shareRepository } from "@/src/features/canvas/repositories/shareRepository";
 
 interface ShareCanvasDialogProps {
   open: boolean;
@@ -35,7 +30,7 @@ export function ShareCanvasDialog({
   // Load existing share settings on open or canvasId change
   React.useEffect(() => {
     if (open && canvasId) {
-      const setting = getCanvasShareSetting(canvasId);
+      const setting = shareRepository.getByCanvasId(canvasId);
       if (setting.permission === "private") {
         setAccessMode("private");
         setPublicPermission("view");
@@ -50,7 +45,7 @@ export function ShareCanvasDialog({
   const handleSelectPrivate = () => {
     setAccessMode("private");
     if (canvasId) {
-      saveCanvasShareSetting(canvasId, "private");
+      shareRepository.save(canvasId, "private");
     }
   };
 
@@ -58,7 +53,7 @@ export function ShareCanvasDialog({
     setAccessMode("anyone");
     setPublicPermission(permissionToSet);
     if (canvasId) {
-      saveCanvasShareSetting(canvasId, permissionToSet);
+      shareRepository.save(canvasId, permissionToSet);
     }
   };
 
@@ -66,13 +61,13 @@ export function ShareCanvasDialog({
     const val = e.target.value as "view" | "edit";
     setPublicPermission(val);
     if (canvasId && accessMode === "anyone") {
-      saveCanvasShareSetting(canvasId, val);
+      shareRepository.save(canvasId, val);
     }
   };
 
   const shareLink = React.useMemo(() => {
     if (!canvasId) return "";
-    return buildShareUrl(canvasId, publicPermission);
+    return shareRepository.buildUrl(canvasId, publicPermission);
   }, [canvasId, publicPermission]);
 
   const handleCopy = () => {

@@ -5,11 +5,10 @@ import { Eye, Edit3, Lock, AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import {
   CANVAS_BOARD_BACKGROUND,
-  loadCanvasesFromStorage,
-  saveCanvasesToStorage,
+  canvasRepository,
   cleanAppStateForStorage,
-} from "@/src/features/canvas/utils/canvasStorage";
-import { getCanvasShareSetting } from "@/src/features/canvas/utils/shareStorage";
+} from "@/src/features/canvas/repositories/canvasRepository";
+import { shareRepository } from "@/src/features/canvas/repositories/shareRepository";
 
 interface SharedCanvasWorkspaceProps {
   canvasId: string;
@@ -24,12 +23,11 @@ export function SharedCanvasWorkspace({
 }: SharedCanvasWorkspaceProps) {
   // Load target canvas and share settings once / when canvasId changes
   const targetCanvas = React.useMemo(() => {
-    const all = loadCanvasesFromStorage();
-    return all.find((c) => c.id === canvasId) || null;
+    return canvasRepository.getById(canvasId);
   }, [canvasId]);
 
   const shareSetting = React.useMemo(() => {
-    return getCanvasShareSetting(canvasId);
+    return shareRepository.getByCanvasId(canvasId);
   }, [canvasId]);
 
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<any>(null);
@@ -77,7 +75,7 @@ export function SharedCanvasWorkspace({
     if (!pendingSceneRef.current || isViewOnly) return;
 
     const { elements, appState, files } = pendingSceneRef.current;
-    const currentCanvases = loadCanvasesFromStorage();
+    const currentCanvases = canvasRepository.getAll();
     const updatedCanvases = currentCanvases.map((c) => {
       if (c.id !== canvasId) return c;
       return {
@@ -90,7 +88,7 @@ export function SharedCanvasWorkspace({
         updatedAt: new Date().toISOString(),
       };
     });
-    saveCanvasesToStorage(updatedCanvases);
+    canvasRepository.save(updatedCanvases);
     pendingSceneRef.current = null;
   }, [canvasId, isViewOnly]);
 

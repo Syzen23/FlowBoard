@@ -1,11 +1,9 @@
 import * as React from "react";
 import { Task, TaskStatus } from "@/src/types";
 import {
-  loadTasksFromStorage,
-  saveTasksToStorage,
-  addTaskToStorage,
+  taskRepository,
   TASKS_UPDATED_EVENT,
-} from "@/src/features/calendar/utils/taskStorage";
+} from "@/src/features/calendar/repositories/taskRepository";
 
 export interface CreateTaskInput {
   title: string;
@@ -27,7 +25,7 @@ export interface UpdateTaskInput {
 
 export function useTaskManager() {
   const [tasks, setTasks] = React.useState<Task[]>(() => {
-    return loadTasksFromStorage();
+    return taskRepository.getAll();
   });
 
   // Listen for storage / custom update events across views
@@ -37,7 +35,7 @@ export function useTaskManager() {
       if (customEvent && customEvent.detail && Array.isArray(customEvent.detail)) {
         setTasks(customEvent.detail);
       } else {
-        setTasks(loadTasksFromStorage());
+        setTasks(taskRepository.getAll());
       }
     };
 
@@ -51,7 +49,7 @@ export function useTaskManager() {
 
   // Create a new task
   const createTask = React.useCallback((input: CreateTaskInput): Task => {
-    const newTask = addTaskToStorage({
+    const newTask = taskRepository.create({
       title: input.title,
       dueDate: input.dueDate,
       dueTime: input.dueTime,
@@ -59,41 +57,21 @@ export function useTaskManager() {
       status: input.status || "todo",
       canvasId: input.canvasId !== undefined ? input.canvasId : null,
     });
-    setTasks(loadTasksFromStorage());
+    setTasks(taskRepository.getAll());
     return newTask;
   }, []);
 
   // Update an existing task
   const updateTask = React.useCallback(
     (taskId: string, updates: UpdateTaskInput) => {
-      setTasks((prev) => {
-        const updated = prev.map((task) => {
-          if (task.id !== taskId) return task;
-          return {
-            ...task,
-            ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
-            ...(updates.dueDate !== undefined ? { dueDate: updates.dueDate } : {}),
-            ...(updates.dueTime !== undefined ? { dueTime: updates.dueTime || undefined } : {}),
-            ...(updates.description !== undefined ? { description: updates.description.trim() || undefined } : {}),
-            ...(updates.status !== undefined ? { status: updates.status } : {}),
-            ...(updates.canvasId !== undefined ? { canvasId: updates.canvasId } : {}),
-            updatedAt: new Date().toISOString(),
-          };
-        });
-        saveTasksToStorage(updated);
-        return updated;
-      });
+      setTasks(taskRepository.update(taskId, updates));
     },
     []
   );
 
   // Delete a task
   const deleteTask = React.useCallback((taskId: string) => {
-    setTasks((prev) => {
-      const updated = prev.filter((t) => t.id !== taskId);
-      saveTasksToStorage(updated);
-      return updated;
-    });
+    setTasks(taskRepository.delete(taskId));
   }, []);
 
   // Set task status directly
@@ -105,7 +83,7 @@ export function useTaskManager() {
             ? { ...t, status: newStatus, updatedAt: new Date().toISOString() }
             : t
         );
-        saveTasksToStorage(updated);
+        taskRepository.save(updated);
         return updated;
       });
     },
@@ -120,7 +98,7 @@ export function useTaskManager() {
         const nextStatus: TaskStatus = t.status === "done" ? "todo" : "done";
         return { ...t, status: nextStatus, updatedAt: new Date().toISOString() };
       });
-      saveTasksToStorage(updated);
+      taskRepository.save(updated);
       return updated;
     });
   }, []);

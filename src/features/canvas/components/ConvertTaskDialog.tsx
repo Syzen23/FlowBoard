@@ -8,7 +8,7 @@ import {
   DialogDescription,
 } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
-import { addTaskToStorage } from "@/src/features/calendar/utils/taskStorage";
+import { taskRepository } from "@/src/features/calendar/repositories/taskRepository";
 import { Task } from "@/src/types";
 
 interface ConvertTaskDialogProps {
@@ -49,7 +49,7 @@ export function ConvertTaskDialog({
     e.preventDefault();
     if (!title.trim() || !deadline) return;
 
-    const newTask = addTaskToStorage({
+    const newTask = taskRepository.create({
       title: title.trim(),
       dueDate: deadline,
       dueTime: time.trim() ? time.trim() : undefined,

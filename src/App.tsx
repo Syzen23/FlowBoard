@@ -4,6 +4,7 @@ import CanvasPage from "@/src/app/app/canvas/page";
 import CalendarPage from "@/src/app/app/calendar/page";
 import SharePage from "@/src/app/app/share/page";
 import { RouteMode } from "@/src/types";
+import { canvasRepository } from "@/src/features/canvas/repositories/canvasRepository";
 
 function parseRouteFromUrl(): {
   mode: RouteMode;
@@ -51,10 +52,9 @@ export function App() {
   const [routeInfo, setRouteInfo] = React.useState(() => parseRouteFromUrl());
 
   const [activeCanvasId, setActiveCanvasId] = React.useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("flowboard_current_canvas") || "";
-    }
-    return "";
+    return canvasRepository.getActiveCanvasId(
+      canvasRepository.getAll().map((canvas) => canvas.id)
+    );
   });
 
   // Handle browser back/forward buttons
@@ -84,9 +84,7 @@ export function App() {
   };
 
   const handleOpenCanvasFromCalendar = (canvasId: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("flowboard_current_canvas", canvasId);
-    }
+    canvasRepository.setActiveCanvasId(canvasId);
     setActiveCanvasId(canvasId);
     handleNavigate("canvas");
   };

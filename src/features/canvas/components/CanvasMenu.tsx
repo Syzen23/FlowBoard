@@ -3,7 +3,7 @@ import { Plus, Settings, Check, Trash2, Edit2, Layers, AlertCircle, X } from "lu
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
 import { CanvasWorkspace } from "@/src/types";
-import { MAX_CANVASES, MIN_CANVASES } from "@/src/features/canvas/utils/canvasStorage";
+import { MAX_CANVASES, MIN_CANVASES } from "@/src/features/canvas/repositories/canvasRepository";
 
 interface CanvasMenuProps {
   open: boolean;

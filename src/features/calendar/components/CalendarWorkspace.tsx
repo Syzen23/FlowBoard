@@ -46,7 +46,7 @@ export function CalendarWorkspace({
     deleteCanvas,
   } = useCanvasManager();
 
-  // Task manager with localStorage persistence
+  // Task manager with repository-backed persistence
   const {
     tasks,
     createTask,

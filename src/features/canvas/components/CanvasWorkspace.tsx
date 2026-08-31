@@ -16,7 +16,7 @@ import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 import {
   CANVAS_BOARD_BACKGROUND,
   cleanAppStateForStorage,
-} from "@/src/features/canvas/utils/canvasStorage";
+} from "@/src/features/canvas/repositories/canvasRepository";
 
 interface CanvasWorkspaceProps {
   onModeChange: (mode: RouteMode) => void;

@@ -1,34 +1,30 @@
 import * as React from "react";
 import { CanvasWorkspace } from "@/src/types";
 import {
-  loadCanvasesFromStorage,
-  saveCanvasesToStorage,
-  loadCurrentCanvasIdFromStorage,
-  saveCurrentCanvasIdToStorage,
-  createNewCanvas,
   cleanAppStateForStorage,
   CANVAS_BOARD_BACKGROUND,
   CANVAS_DEFAULT_FILL_COLOR,
   CANVAS_DEFAULT_STROKE_COLOR,
   MAX_CANVASES,
   MIN_CANVASES,
-} from "@/src/features/canvas/utils/canvasStorage";
-import { unlinkTasksForCanvas } from "@/src/features/calendar/utils/taskStorage";
+  canvasRepository,
+} from "@/src/features/canvas/repositories/canvasRepository";
+import { taskRepository } from "@/src/features/calendar/repositories/taskRepository";
 
 export type SaveStatus = "saved" | "saving";
 
 export function useCanvasManager(initialSelectedId?: string) {
   const [canvases, setCanvases] = React.useState<CanvasWorkspace[]>(() => {
-    return loadCanvasesFromStorage();
+    return canvasRepository.getAll();
   });
 
   const [activeCanvasId, setActiveCanvasId] = React.useState<string>(() => {
-    const loadedCanvases = loadCanvasesFromStorage();
+    const loadedCanvases = canvasRepository.getAll();
     const validIds = loadedCanvases.map((c) => c.id);
     if (initialSelectedId && validIds.includes(initialSelectedId)) {
       return initialSelectedId;
     }
-    return loadCurrentCanvasIdFromStorage(validIds);
+    return canvasRepository.getActiveCanvasId(validIds);
   });
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("saved");
@@ -51,10 +47,10 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   // Sync active canvas ID across storage when changed
   React.useEffect(() => {
-    saveCurrentCanvasIdToStorage(activeCanvasId);
+    canvasRepository.setActiveCanvasId(activeCanvasId);
   }, [activeCanvasId]);
 
-  // Flush any pending changes to localStorage
+  // Flush any pending changes to persistence
   const flushCurrentScene = React.useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -79,7 +75,7 @@ export function useCanvasManager(initialSelectedId?: string) {
       });
 
       setCanvases(updatedCanvases);
-      saveCanvasesToStorage(updatedCanvases);
+      canvasRepository.save(updatedCanvases);
       pendingSceneRef.current = null;
       setSaveStatus("saved");
     }
@@ -127,7 +123,7 @@ export function useCanvasManager(initialSelectedId?: string) {
       isProgrammaticUpdateRef.current = true;
       activeCanvasIdRef.current = targetCanvasId;
       setActiveCanvasId(targetCanvasId);
-      saveCurrentCanvasIdToStorage(targetCanvasId);
+      canvasRepository.setActiveCanvasId(targetCanvasId);
 
       // 4. Update Excalidraw scene if API is available
       if (excalidrawAPI) {
@@ -163,18 +159,18 @@ export function useCanvasManager(initialSelectedId?: string) {
       // Flush current scene before adding
       flushCurrentScene();
 
-      const newCanvas = createNewCanvas("Untitled Canvas");
+      const newCanvas = canvasRepository.create("Untitled Canvas");
       const updatedCanvases = [...canvasesRef.current, newCanvas];
 
       canvasesRef.current = updatedCanvases;
       setCanvases(updatedCanvases);
-      saveCanvasesToStorage(updatedCanvases);
+      canvasRepository.save(updatedCanvases);
 
       // Switch to the newly created canvas
       isProgrammaticUpdateRef.current = true;
       activeCanvasIdRef.current = newCanvas.id;
       setActiveCanvasId(newCanvas.id);
-      saveCurrentCanvasIdToStorage(newCanvas.id);
+      canvasRepository.setActiveCanvasId(newCanvas.id);
 
       if (excalidrawAPI) {
         excalidrawAPI.updateScene({
@@ -208,7 +204,7 @@ export function useCanvasManager(initialSelectedId?: string) {
       const updated = prev.map((c) =>
         c.id === id ? { ...c, title: trimmed, updatedAt: new Date().toISOString() } : c
       );
-      saveCanvasesToStorage(updated);
+      canvasRepository.save(updated);
       return updated;
     });
   }, []);
@@ -221,7 +217,7 @@ export function useCanvasManager(initialSelectedId?: string) {
       }
 
       // Unlink any tasks associated with this deleted canvas
-      unlinkTasksForCanvas(id);
+      taskRepository.unlinkCanvas(id);
 
       // If deleting the active canvas, determine next active canvas
       const currentId = activeCanvasIdRef.current;
@@ -229,7 +225,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
       canvasesRef.current = updated;
       setCanvases(updated);
-      saveCanvasesToStorage(updated);
+      canvasRepository.save(updated);
 
       if (currentId === id) {
         const nextActive = updated[0];
@@ -237,7 +233,7 @@ export function useCanvasManager(initialSelectedId?: string) {
           isProgrammaticUpdateRef.current = true;
           activeCanvasIdRef.current = nextActive.id;
           setActiveCanvasId(nextActive.id);
-          saveCurrentCanvasIdToStorage(nextActive.id);
+          canvasRepository.setActiveCanvasId(nextActive.id);
 
           if (excalidrawAPI) {
             const sceneData = nextActive.sceneData;
@@ -268,7 +264,7 @@ export function useCanvasManager(initialSelectedId?: string) {
     return (
       canvases.find((c) => c.id === activeCanvasId) ||
       canvases[0] ||
-      createNewCanvas("Untitled Canvas")
+      canvasRepository.create("Untitled Canvas")
     );
   }, [canvases, activeCanvasId]);
 
