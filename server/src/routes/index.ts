@@ -24,5 +24,16 @@ apiRouter.get("/health/db", async (_req, res, next) => {
   }
 });
 
+apiRouter.get("/tasks/data", async (_req, res, next) => {
+  const sql = "SELECT * FROM tasks";
+  try {
+    const result = await db.query(sql);
+    res.status(200).json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+
+})
+
 apiRouter.use("/canvases", canvasRouter);
 apiRouter.use("/tasks", taskRouter);

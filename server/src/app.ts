@@ -19,6 +19,7 @@ export function createApp() {
 
   app.use("/api", apiRouter);
   app.use(jsonParseErrorHandler);
+  app.use(genericErrorHandler);
 
   return app;
 }
@@ -34,4 +35,13 @@ const jsonParseErrorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   }
 
   next(error);
+};
+
+const genericErrorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({
+    error: {
+      message: "Internal server error",
+    },
+  });
 };

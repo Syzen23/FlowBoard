@@ -1,16 +1,28 @@
 import dotenv from "dotenv";
-import pg from "pg";
+import pg, { type Pool, type QueryResult } from "pg";
 
 dotenv.config();
 
-const { Pool } = pg;
+const { Pool: PgPool } = pg;
 
-const databaseUrl = process.env.DATABASE_URL;
+let pool: Pool | null = null;
 
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
+function getPool(): Pool {
+  if (pool) return pool;
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required");
+  }
+
+  pool = new PgPool({
+    connectionString: databaseUrl,
+  });
+
+  return pool;
 }
 
-export const db = new Pool({
-  connectionString: databaseUrl,
-});
+export const db = {
+  query: (text: string, values?: unknown[]): Promise<QueryResult> => getPool().query(text, values),
+  end: () => (pool ? pool.end() : Promise.resolve()),
+};
