@@ -146,11 +146,7 @@ export function SharedCanvasWorkspace({
           variant="secondary"
           size="sm"
           onClick={() => {
-            if (onReturnToApp) {
-              onReturnToApp();
-            } else if (typeof window !== "undefined") {
-              window.location.href = "/app/canvas";
-            }
+            onReturnToApp?.();
           }}
           className="gap-2 text-xs"
         >
@@ -176,11 +172,7 @@ export function SharedCanvasWorkspace({
           variant="secondary"
           size="sm"
           onClick={() => {
-            if (onReturnToApp) {
-              onReturnToApp();
-            } else if (typeof window !== "undefined") {
-              window.location.href = "/app/canvas";
-            }
+            onReturnToApp?.();
           }}
           className="gap-2 text-xs"
         >
@@ -227,11 +219,7 @@ export function SharedCanvasWorkspace({
             variant="secondary"
             size="sm"
             onClick={() => {
-              if (onReturnToApp) {
-                onReturnToApp();
-              } else if (typeof window !== "undefined") {
-                window.location.href = "/app/canvas";
-              }
+              onReturnToApp?.();
             }}
             title="Go to Owner FlowBoard"
             className="h-8 px-2.5 rounded-lg bg-[#1e1e22]/90 hover:bg-[#28282e] border-zinc-800 text-zinc-300 shadow-md backdrop-blur-md cursor-pointer gap-1.5 text-xs font-medium"

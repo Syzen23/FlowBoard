@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import RootLayout from "@/src/app/layout";
 import CanvasPage from "@/src/app/app/canvas/page";
 import CalendarPage from "@/src/app/app/calendar/page";
@@ -6,64 +7,12 @@ import SharePage from "@/src/app/app/share/page";
 import { RouteMode } from "@/src/types";
 import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 
-function parseRouteFromUrl(): {
-  mode: RouteMode;
-  shareCanvasId?: string;
-  sharePermission?: "view" | "edit";
-} {
-  if (typeof window === "undefined") {
-    return { mode: "canvas" };
-  }
-
-  const pathname = window.location.pathname;
-  const search = window.location.search;
-  const params = new URLSearchParams(search);
-
-  if (pathname.includes("/app/share") || pathname.includes("/share")) {
-    // Extract canvas ID from path: /app/share/:canvasId or query: ?canvasId=...
-    const parts = pathname.split("/").filter(Boolean);
-    const shareIndex = parts.findIndex((p) => p === "share");
-    let canvasId = "";
-    if (shareIndex !== -1 && parts[shareIndex + 1]) {
-      canvasId = parts[shareIndex + 1];
-    } else {
-      canvasId = params.get("canvasId") || "";
-    }
-
-    const permParam = params.get("permission");
-    const sharePermission: "view" | "edit" | undefined =
-      permParam === "edit" ? "edit" : permParam === "view" ? "view" : undefined;
-
-    return {
-      mode: "share",
-      shareCanvasId: canvasId,
-      sharePermission,
-    };
-  }
-
-  if (pathname.includes("calendar")) {
-    return { mode: "calendar" };
-  }
-
-  return { mode: "canvas" };
-}
-
 export function App() {
-  const [routeInfo, setRouteInfo] = React.useState(() => parseRouteFromUrl());
   const canvasManager = useCanvasManager();
+  const navigate = useNavigate();
 
-  // Handle browser back/forward buttons
-  React.useEffect(() => {
-    const handlePopState = () => {
-      setRouteInfo(parseRouteFromUrl());
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  const handleNavigate = (newMode: RouteMode) => {
-    if (typeof window !== "undefined") {
+  const handleNavigate = React.useCallback(
+    (newMode: RouteMode) => {
       const targetUrl =
         newMode === "calendar"
           ? "/app/calendar"
@@ -71,39 +20,70 @@ export function App() {
           ? `/app/share/${canvasManager.activeCanvasId}?permission=view`
           : "/app/canvas";
 
-      if (window.location.pathname !== targetUrl) {
-        window.history.pushState(null, "", targetUrl);
-      }
-    }
-    setRouteInfo(parseRouteFromUrl());
-  };
+      navigate(targetUrl);
+    },
+    [canvasManager.activeCanvasId, navigate]
+  );
 
-  const handleOpenCanvasFromCalendar = (canvasId: string) => {
-    canvasManager.switchCanvas(canvasId);
-    handleNavigate("canvas");
-  };
+  const handleOpenCanvasFromCalendar = React.useCallback(
+    (canvasId: string) => {
+      canvasManager.switchCanvas(canvasId);
+      navigate("/app/canvas");
+    },
+    [canvasManager, navigate]
+  );
 
   return (
     <RootLayout>
-      {routeInfo.mode === "share" ? (
-        <SharePage
-          canvasId={routeInfo.shareCanvasId || ""}
-          permission={routeInfo.sharePermission}
-          onReturnToApp={() => handleNavigate("canvas")}
+      <Routes>
+        <Route path="/" element={<Navigate to="/app/canvas" replace />} />
+        <Route path="/app" element={<Navigate to="/app/canvas" replace />} />
+        <Route
+          path="/app/canvas"
+          element={
+            <CanvasPage
+              onNavigate={handleNavigate}
+              canvasManager={canvasManager}
+            />
+          }
         />
-      ) : routeInfo.mode === "calendar" ? (
-        <CalendarPage
-          onNavigate={handleNavigate}
-          onOpenCanvas={handleOpenCanvasFromCalendar}
-          canvasManager={canvasManager}
+        <Route
+          path="/app/calendar"
+          element={
+            <CalendarPage
+              onNavigate={handleNavigate}
+              onOpenCanvas={handleOpenCanvasFromCalendar}
+              canvasManager={canvasManager}
+            />
+          }
         />
-      ) : (
-        <CanvasPage
-          onNavigate={handleNavigate}
-          canvasManager={canvasManager}
+        <Route
+          path="/app/share/:canvasId"
+          element={<ShareRoute onReturnToApp={() => handleNavigate("canvas")} />}
         />
-      )}
+        <Route path="*" element={<Navigate to="/app/canvas" replace />} />
+      </Routes>
     </RootLayout>
+  );
+}
+
+interface ShareRouteProps {
+  onReturnToApp: () => void;
+}
+
+function ShareRoute({ onReturnToApp }: ShareRouteProps) {
+  const { canvasId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const permissionParam = searchParams.get("permission");
+  const permission =
+    permissionParam === "edit" ? "edit" : permissionParam === "view" ? "view" : undefined;
+
+  return (
+    <SharePage
+      canvasId={canvasId}
+      permission={permission}
+      onReturnToApp={onReturnToApp}
+    />
   );
 }
 
