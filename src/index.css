@@ -61,3 +61,14 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+/* Excalidraw dark theme inverts the canvas pixels by default. FlowBoard owns
+   the board color directly, so keep the canvas pixels unfiltered. */
+.flowboard-excalidraw .excalidraw.theme--dark {
+  --theme-filter: none;
+}
+
+.flowboard-excalidraw .excalidraw,
+.flowboard-excalidraw .excalidraw__canvas-wrapper {
+  background: #141416;
+}

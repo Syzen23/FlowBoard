@@ -13,7 +13,10 @@ import { ConvertTaskDialog } from "@/src/features/canvas/components/ConvertTaskD
 import { ShareCanvasDialog } from "@/src/features/canvas/components/ShareCanvasDialog";
 import { RouteMode } from "@/src/types";
 import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
-import { cleanAppStateForStorage } from "@/src/features/canvas/utils/canvasStorage";
+import {
+  CANVAS_BOARD_BACKGROUND,
+  cleanAppStateForStorage,
+} from "@/src/features/canvas/utils/canvasStorage";
 
 interface CanvasWorkspaceProps {
   onModeChange: (mode: RouteMode) => void;
@@ -41,6 +44,7 @@ export function CanvasWorkspace({
     createCanvas,
     renameCanvas,
     deleteCanvas,
+    isProgrammaticUpdateRef,
   } = useCanvasManager(propActiveCanvasId);
 
   // Sync external prop if provided
@@ -49,6 +53,34 @@ export function CanvasWorkspace({
       switchCanvas(propActiveCanvasId, excalidrawAPI);
     }
   }, [propActiveCanvasId, activeCanvasId, switchCanvas, excalidrawAPI]);
+
+  const applyDarkCanvasAppearance = React.useCallback(() => {
+    if (!excalidrawAPI) return;
+
+    isProgrammaticUpdateRef.current = true;
+    excalidrawAPI.updateScene({
+      appState: {
+        ...cleanAppStateForStorage(activeCanvas.sceneData?.appState),
+        theme: "dark",
+        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+      },
+    });
+
+    window.setTimeout(() => {
+      isProgrammaticUpdateRef.current = false;
+    }, 150);
+  }, [activeCanvas.sceneData?.appState, excalidrawAPI, isProgrammaticUpdateRef]);
+
+  React.useEffect(() => {
+    if (!excalidrawAPI) return;
+
+    applyDarkCanvasAppearance();
+    const restoreSyncTimer = window.setTimeout(applyDarkCanvasAppearance, 250);
+
+    return () => {
+      window.clearTimeout(restoreSyncTimer);
+    };
+  }, [activeCanvas.id, applyDarkCanvasAppearance, excalidrawAPI]);
 
   const handleSelectCanvas = (id: string) => {
     switchCanvas(id, excalidrawAPI);
@@ -71,46 +103,58 @@ export function CanvasWorkspace({
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
       {/* Excalidraw Canvas Viewport */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 flowboard-excalidraw">
         <Excalidraw
+          key={activeCanvas.id}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
           initialData={{
-            elements: activeCanvas.sceneData?.elements || [],
+            elements: (activeCanvas.sceneData?.elements || []) as any,
             appState: {
               ...cleanAppStateForStorage(activeCanvas.sceneData?.appState),
               theme: "dark",
+              viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
             },
-            files: activeCanvas.sceneData?.files || {},
+            files: (activeCanvas.sceneData?.files || {}) as any,
           }}
           onChange={(elements, appState, files) => {
-            handleSceneChange(elements, appState, files);
+            const flowBoardAppState = {
+              ...appState,
+              theme: "dark",
+              viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+            };
+
+            if (appState.viewBackgroundColor !== CANVAS_BOARD_BACKGROUND) {
+              applyDarkCanvasAppearance();
+            }
+
+            handleSceneChange(elements, flowBoardAppState, files);
           }}
           UIOptions={{
             canvasActions: {
-              changeViewBackgroundColor: true,
+              changeViewBackgroundColor: false,
               clearCanvas: true,
               export: {
                 saveFileToDisk: true,
               },
               loadScene: true,
               saveAsImage: true,
-              theme: false,
+              toggleTheme: false,
             },
           }}
         />
       </div>
 
       {/* Top Bar Floating Controls */}
-      <header className="relative z-20 flex items-center justify-between p-3 sm:p-4 w-full pointer-events-none">
+      <header className="relative z-20 flex items-center justify-between p-4 sm:p-5 w-full pointer-events-none">
         {/* Left: Hamburger menu, Title pill, and subtle autosave indicator */}
-        <div className="pointer-events-auto flex items-center gap-2.5">
+        <div className="pointer-events-auto flex items-center gap-3">
           <Button
             variant="secondary"
             size="icon"
             onClick={() => setMenuOpen(true)}
             aria-label="Open Canvases Menu"
-            className="w-9 h-9 rounded-lg bg-[#1e1e22]/90 hover:bg-[#28282e] border-zinc-800 text-zinc-300 shadow-md backdrop-blur-md cursor-pointer"
+            className="w-9 h-9 rounded-lg bg-[#1e1e22]/90 hover:bg-[#28282e] border-zinc-800 text-zinc-300 shadow-md"
           >
             <Menu className="w-4 h-4" />
           </Button>
@@ -147,7 +191,7 @@ export function CanvasWorkspace({
             variant="orange"
             size="sm"
             onClick={() => setConvertOpen(true)}
-            className="text-xs h-8 px-3 rounded-lg shadow-md gap-1.5 font-medium cursor-pointer"
+            className="text-xs h-8 px-3 rounded-lg shadow-md gap-1.5 font-medium cursor-pointer ring-0 outline-none"
           >
             <CheckSquare className="w-3.5 h-3.5" />
             <span>Convert to Task</span>
@@ -157,7 +201,7 @@ export function CanvasWorkspace({
             variant="blue"
             size="sm"
             onClick={() => setShareOpen(true)}
-            className="text-xs h-8 px-3.5 rounded-lg shadow-md gap-1.5 font-medium cursor-pointer"
+            className="text-xs h-8 px-3.5 rounded-lg shadow-md gap-1.5 font-medium"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>Share</span>
@@ -165,8 +209,10 @@ export function CanvasWorkspace({
         </div>
       </header>
 
+      <main className="relative z-10 flex-1 pointer-events-none" />
+
       {/* Bottom Center: Workspace Switcher */}
-      <footer className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+      <footer className="relative z-20 w-full p-4 sm:p-5 flex justify-center pointer-events-none">
         <div className="pointer-events-auto">
           <WorkspaceSwitcher currentMode="canvas" onModeChange={onModeChange} />
         </div>

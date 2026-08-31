@@ -4,6 +4,22 @@ export const STORAGE_KEY_CANVASES = "flowboard_canvases";
 export const STORAGE_KEY_CURRENT_CANVAS = "flowboard_current_canvas";
 export const MAX_CANVASES = 3;
 export const MIN_CANVASES = 1;
+export const CANVAS_BOARD_BACKGROUND = "#141416";
+export const CANVAS_DEFAULT_STROKE_COLOR = "#ffffff";
+export const CANVAS_DEFAULT_FILL_COLOR = "transparent";
+
+function normalizeToolStrokeColor(color: unknown): string {
+  if (
+    typeof color !== "string" ||
+    color === "#000" ||
+    color === "#000000" ||
+    color === "#1e1e1e"
+  ) {
+    return CANVAS_DEFAULT_STROKE_COLOR;
+  }
+
+  return color;
+}
 
 export function createNewCanvas(title: string = "Untitled Canvas"): CanvasWorkspace {
   const now = new Date().toISOString();
@@ -13,7 +29,9 @@ export function createNewCanvas(title: string = "Untitled Canvas"): CanvasWorksp
     sceneData: {
       elements: [],
       appState: {
-        viewBackgroundColor: "#141416",
+        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+        currentItemStrokeColor: CANVAS_DEFAULT_STROKE_COLOR,
+        currentItemBackgroundColor: CANVAS_DEFAULT_FILL_COLOR,
       },
       files: {},
     },
@@ -82,12 +100,52 @@ export function saveCurrentCanvasIdToStorage(id: string): void {
 }
 
 export function cleanAppStateForStorage(appState: any): Record<string, any> {
-  if (!appState) return {};
-  return {
-    viewBackgroundColor: appState.viewBackgroundColor || "#141416",
-    zoom: appState.zoom,
-    scrollX: appState.scrollX,
-    scrollY: appState.scrollY,
-    gridSize: appState.gridSize,
+  const cleaned: Record<string, any> = {
+    viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+    currentItemStrokeColor: normalizeToolStrokeColor(appState?.currentItemStrokeColor),
+    currentItemBackgroundColor:
+      typeof appState?.currentItemBackgroundColor === "string"
+        ? appState.currentItemBackgroundColor
+        : CANVAS_DEFAULT_FILL_COLOR,
   };
+
+  if (!appState) return cleaned;
+
+  if (
+    appState.zoom &&
+    typeof appState.zoom === "object" &&
+    typeof appState.zoom.value === "number"
+  ) {
+    cleaned.zoom = appState.zoom;
+  }
+
+  if (typeof appState.scrollX === "number") {
+    cleaned.scrollX = appState.scrollX;
+  }
+
+  if (typeof appState.scrollY === "number") {
+    cleaned.scrollY = appState.scrollY;
+  }
+
+  if (typeof appState.gridSize === "number") {
+    cleaned.gridSize = appState.gridSize;
+  }
+
+  if (typeof appState.currentItemRoughness === "number") {
+    cleaned.currentItemRoughness = appState.currentItemRoughness;
+  }
+
+  if (typeof appState.currentItemOpacity === "number") {
+    cleaned.currentItemOpacity = appState.currentItemOpacity;
+  }
+
+  if (typeof appState.currentItemFontFamily === "number") {
+    cleaned.currentItemFontFamily = appState.currentItemFontFamily;
+  }
+
+  if (typeof appState.currentItemFontSize === "number") {
+    cleaned.currentItemFontSize = appState.currentItemFontSize;
+  }
+
+  return cleaned;
 }

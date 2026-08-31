@@ -7,6 +7,9 @@ import {
   saveCurrentCanvasIdToStorage,
   createNewCanvas,
   cleanAppStateForStorage,
+  CANVAS_BOARD_BACKGROUND,
+  CANVAS_DEFAULT_FILL_COLOR,
+  CANVAS_DEFAULT_STROKE_COLOR,
   MAX_CANVASES,
   MIN_CANVASES,
 } from "@/src/features/canvas/utils/canvasStorage";
@@ -65,7 +68,7 @@ export function useCanvasManager(initialSelectedId?: string) {
           return {
             ...c,
             sceneData: {
-              elements: pendingSceneRef.current?.elements || [],
+              elements: [...(pendingSceneRef.current?.elements || [])],
               appState: cleanAppStateForStorage(pendingSceneRef.current?.appState),
               files: pendingSceneRef.current?.files || {},
             },
@@ -130,12 +133,13 @@ export function useCanvasManager(initialSelectedId?: string) {
       if (excalidrawAPI) {
         const sceneData = target.sceneData;
         excalidrawAPI.updateScene({
-          elements: sceneData?.elements || [],
+          elements: (sceneData?.elements || []) as any,
           appState: {
             ...cleanAppStateForStorage(sceneData?.appState),
             theme: "dark",
+            viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
           },
-          files: sceneData?.files || {},
+          files: (sceneData?.files || {}) as any,
         });
         if (excalidrawAPI.history?.clear) {
           excalidrawAPI.history.clear();
@@ -176,8 +180,10 @@ export function useCanvasManager(initialSelectedId?: string) {
         excalidrawAPI.updateScene({
           elements: [],
           appState: {
-            viewBackgroundColor: "#141416",
+            viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
             theme: "dark",
+            currentItemStrokeColor: CANVAS_DEFAULT_STROKE_COLOR,
+            currentItemBackgroundColor: CANVAS_DEFAULT_FILL_COLOR,
           },
           files: {},
         });
@@ -236,12 +242,13 @@ export function useCanvasManager(initialSelectedId?: string) {
           if (excalidrawAPI) {
             const sceneData = nextActive.sceneData;
             excalidrawAPI.updateScene({
-              elements: sceneData?.elements || [],
+              elements: (sceneData?.elements || []) as any,
               appState: {
                 ...cleanAppStateForStorage(sceneData?.appState),
                 theme: "dark",
+                viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
               },
-              files: sceneData?.files || {},
+              files: (sceneData?.files || {}) as any,
             });
             if (excalidrawAPI.history?.clear) {
               excalidrawAPI.history.clear();

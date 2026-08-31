@@ -4,6 +4,7 @@ import "@excalidraw/excalidraw/index.css";
 import { Eye, Edit3, Lock, AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import {
+  CANVAS_BOARD_BACKGROUND,
   loadCanvasesFromStorage,
   saveCanvasesToStorage,
   cleanAppStateForStorage,
@@ -31,6 +32,8 @@ export function SharedCanvasWorkspace({
     return getCanvasShareSetting(canvasId);
   }, [canvasId]);
 
+  const [excalidrawAPI, setExcalidrawAPI] = React.useState<any>(null);
+
   // Determine effective permission
   const isPrivate = shareSetting.permission === "private";
 
@@ -47,13 +50,14 @@ export function SharedCanvasWorkspace({
   const initialData = React.useMemo(() => {
     if (!targetCanvas) return null;
     return {
-      elements: targetCanvas.sceneData?.elements || [],
+      elements: (targetCanvas.sceneData?.elements || []) as any,
       appState: {
         ...cleanAppStateForStorage(targetCanvas.sceneData?.appState),
-        theme: "dark",
+        theme: "dark" as const,
+        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
         viewModeEnabled: isViewOnly,
       },
-      files: targetCanvas.sceneData?.files || {},
+      files: (targetCanvas.sceneData?.files || {}) as any,
     };
   }, [canvasId, isViewOnly, targetCanvas]);
 
@@ -97,14 +101,48 @@ export function SharedCanvasWorkspace({
     };
   }, [flushSceneToStorage]);
 
+  const applyDarkCanvasAppearance = React.useCallback(() => {
+    if (!excalidrawAPI || !targetCanvas) return;
+
+    excalidrawAPI.updateScene({
+      appState: {
+        ...cleanAppStateForStorage(targetCanvas.sceneData?.appState),
+        theme: "dark",
+        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+        viewModeEnabled: isViewOnly,
+      },
+    });
+  }, [excalidrawAPI, isViewOnly, targetCanvas]);
+
+  React.useEffect(() => {
+    if (!excalidrawAPI) return;
+
+    applyDarkCanvasAppearance();
+    const restoreSyncTimer = window.setTimeout(applyDarkCanvasAppearance, 250);
+
+    return () => {
+      window.clearTimeout(restoreSyncTimer);
+    };
+  }, [applyDarkCanvasAppearance, excalidrawAPI]);
+
   // Debounced scene change handler (zero React state updates during drawing)
   const handleSceneChange = React.useCallback(
     (elements: readonly any[], appState: any, files: any) => {
       if (isViewOnly) return;
 
+      const flowBoardAppState = {
+        ...appState,
+        theme: "dark",
+        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
+      };
+
+      if (appState.viewBackgroundColor !== CANVAS_BOARD_BACKGROUND) {
+        applyDarkCanvasAppearance();
+      }
+
       pendingSceneRef.current = {
         elements,
-        appState,
+        appState: flowBoardAppState,
         files,
       };
 
@@ -116,7 +154,7 @@ export function SharedCanvasWorkspace({
         flushSceneToStorage();
       }, 750);
     },
-    [isViewOnly, flushSceneToStorage]
+    [isViewOnly, flushSceneToStorage, applyDarkCanvasAppearance]
   );
 
   // If Canvas is not found
@@ -182,9 +220,10 @@ export function SharedCanvasWorkspace({
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
       {/* Excalidraw Viewport */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 flowboard-excalidraw">
         <Excalidraw
           key={`${canvasId}-${effectivePermission}`}
+          excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
           viewModeEnabled={isViewOnly}
           zenModeEnabled={false}
@@ -193,21 +232,21 @@ export function SharedCanvasWorkspace({
           onChange={handleSceneChange}
           UIOptions={{
             canvasActions: {
-              changeViewBackgroundColor: !isViewOnly,
+              changeViewBackgroundColor: false,
               clearCanvas: !isViewOnly,
               export: {
                 saveFileToDisk: true,
               },
               loadScene: false,
               saveAsImage: true,
-              theme: false,
+              toggleTheme: false,
             },
           }}
         />
       </div>
 
       {/* Top Floating Bar for Shared View */}
-      <header className="relative z-20 flex items-center justify-between p-3 sm:p-4 w-full pointer-events-none">
+      <header className="relative z-20 flex items-center justify-between p-4 sm:p-5 w-full pointer-events-none">
         {/* Left: Back to FlowBoard & Canvas Title */}
         <div className="pointer-events-auto flex items-center gap-2.5">
           <Button

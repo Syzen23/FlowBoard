@@ -297,7 +297,7 @@ export function CalendarWorkspace({
                       key={dayNum}
                       type="button"
                       onClick={() => setSelectedDay(dayNum)}
-                      className={`relative h-9 sm:h-10 rounded-xl text-xs font-medium transition-all duration-150 flex flex-col items-center justify-center cursor-pointer ${
+                      className={`relative h-10 sm:h-11 rounded-xl text-xs font-medium transition-all duration-150 flex flex-col items-center justify-center cursor-pointer ${
                         isSelected
                           ? "bg-[#f97316] text-white font-semibold shadow-md ring-2 ring-orange-500/30"
                           : isToday
@@ -305,8 +305,17 @@ export function CalendarWorkspace({
                           : "text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100"
                       }`}
                     >
-                      <span>{dayNum}</span>
-                      {dayHasTasks && (
+                      <span className="leading-none">{dayNum}</span>
+                      {isToday && (
+                        <span
+                          className={`mt-0.5 text-[9px] leading-none font-semibold ${
+                            isSelected ? "text-white/90" : "text-orange-300"
+                          }`}
+                        >
+                          Today
+                        </span>
+                      )}
+                      {dayHasTasks && !isToday && (
                         <span
                           className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
                             isSelected ? "bg-white" : "bg-orange-400"
