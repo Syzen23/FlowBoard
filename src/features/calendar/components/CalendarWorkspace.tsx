@@ -15,17 +15,19 @@ import { ConfirmDialog } from "@/src/components/ui/confirm-dialog";
 import { CanvasMenu } from "@/src/features/canvas/components/CanvasMenu";
 import { ShareCanvasDialog } from "@/src/features/canvas/components/ShareCanvasDialog";
 import { Task, RouteMode, TaskStatus } from "@/src/types";
-import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
+import { CanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 import { useTaskManager } from "@/src/features/calendar/hooks/useTaskManager";
 
 interface CalendarWorkspaceProps {
   onModeChange: (mode: RouteMode) => void;
   onOpenCanvas?: (canvasId: string) => void;
+  canvasManager: CanvasManager;
 }
 
 export function CalendarWorkspace({
   onModeChange,
   onOpenCanvas,
+  canvasManager,
 }: CalendarWorkspaceProps) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
@@ -44,7 +46,7 @@ export function CalendarWorkspace({
     createCanvas,
     renameCanvas,
     deleteCanvas,
-  } = useCanvasManager();
+  } = canvasManager;
 
   // Task manager with repository-backed persistence
   const {

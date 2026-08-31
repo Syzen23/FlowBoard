@@ -1,15 +1,16 @@
 import * as React from "react";
 import { CanvasWorkspace } from "@/src/types";
 import {
-  cleanAppStateForStorage,
-  CANVAS_BOARD_BACKGROUND,
-  CANVAS_DEFAULT_FILL_COLOR,
-  CANVAS_DEFAULT_STROKE_COLOR,
   MAX_CANVASES,
   MIN_CANVASES,
   canvasRepository,
 } from "@/src/features/canvas/repositories/canvasRepository";
 import { taskRepository } from "@/src/features/calendar/repositories/taskRepository";
+import {
+  applySceneToExcalidraw,
+  createFlowBoardAppState,
+  normalizeSceneForStorage,
+} from "@/src/features/canvas/adapters/canvasSceneAdapter";
 
 export type SaveStatus = "saved" | "saving";
 
@@ -63,11 +64,11 @@ export function useCanvasManager(initialSelectedId?: string) {
         if (c.id === currentId) {
           return {
             ...c,
-            sceneData: {
-              elements: [...(pendingSceneRef.current?.elements || [])],
-              appState: cleanAppStateForStorage(pendingSceneRef.current?.appState),
-              files: pendingSceneRef.current?.files || {},
-            },
+            sceneData: normalizeSceneForStorage(
+              pendingSceneRef.current?.elements,
+              pendingSceneRef.current?.appState,
+              pendingSceneRef.current?.files
+            ),
             updatedAt: new Date().toISOString(),
           };
         }
@@ -127,19 +128,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
       // 4. Update Excalidraw scene if API is available
       if (excalidrawAPI) {
-        const sceneData = target.sceneData;
-        excalidrawAPI.updateScene({
-          elements: (sceneData?.elements || []) as any,
-          appState: {
-            ...cleanAppStateForStorage(sceneData?.appState),
-            theme: "dark",
-            viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-          },
-          files: (sceneData?.files || {}) as any,
-        });
-        if (excalidrawAPI.history?.clear) {
-          excalidrawAPI.history.clear();
-        }
+        applySceneToExcalidraw(excalidrawAPI, target.sceneData, { clearHistory: true });
       }
 
       setTimeout(() => {
@@ -173,19 +162,11 @@ export function useCanvasManager(initialSelectedId?: string) {
       canvasRepository.setActiveCanvasId(newCanvas.id);
 
       if (excalidrawAPI) {
-        excalidrawAPI.updateScene({
+        applySceneToExcalidraw(excalidrawAPI, {
           elements: [],
-          appState: {
-            viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-            theme: "dark",
-            currentItemStrokeColor: CANVAS_DEFAULT_STROKE_COLOR,
-            currentItemBackgroundColor: CANVAS_DEFAULT_FILL_COLOR,
-          },
+          appState: createFlowBoardAppState(),
           files: {},
-        });
-        if (excalidrawAPI.history?.clear) {
-          excalidrawAPI.history.clear();
-        }
+        }, { clearHistory: true });
       }
 
       setTimeout(() => {
@@ -236,19 +217,7 @@ export function useCanvasManager(initialSelectedId?: string) {
           canvasRepository.setActiveCanvasId(nextActive.id);
 
           if (excalidrawAPI) {
-            const sceneData = nextActive.sceneData;
-            excalidrawAPI.updateScene({
-              elements: (sceneData?.elements || []) as any,
-              appState: {
-                ...cleanAppStateForStorage(sceneData?.appState),
-                theme: "dark",
-                viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-              },
-              files: (sceneData?.files || {}) as any,
-            });
-            if (excalidrawAPI.history?.clear) {
-              excalidrawAPI.history.clear();
-            }
+            applySceneToExcalidraw(excalidrawAPI, nextActive.sceneData, { clearHistory: true });
           }
 
           setTimeout(() => {
@@ -282,3 +251,5 @@ export function useCanvasManager(initialSelectedId?: string) {
     isProgrammaticUpdateRef,
   };
 }
+
+export type CanvasManager = ReturnType<typeof useCanvasManager>;

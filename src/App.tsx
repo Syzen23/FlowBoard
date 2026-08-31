@@ -4,7 +4,7 @@ import CanvasPage from "@/src/app/app/canvas/page";
 import CalendarPage from "@/src/app/app/calendar/page";
 import SharePage from "@/src/app/app/share/page";
 import { RouteMode } from "@/src/types";
-import { canvasRepository } from "@/src/features/canvas/repositories/canvasRepository";
+import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 
 function parseRouteFromUrl(): {
   mode: RouteMode;
@@ -50,12 +50,7 @@ function parseRouteFromUrl(): {
 
 export function App() {
   const [routeInfo, setRouteInfo] = React.useState(() => parseRouteFromUrl());
-
-  const [activeCanvasId, setActiveCanvasId] = React.useState<string>(() => {
-    return canvasRepository.getActiveCanvasId(
-      canvasRepository.getAll().map((canvas) => canvas.id)
-    );
-  });
+  const canvasManager = useCanvasManager();
 
   // Handle browser back/forward buttons
   React.useEffect(() => {
@@ -73,7 +68,7 @@ export function App() {
         newMode === "calendar"
           ? "/app/calendar"
           : newMode === "share"
-          ? `/app/share/${activeCanvasId}?permission=view`
+          ? `/app/share/${canvasManager.activeCanvasId}?permission=view`
           : "/app/canvas";
 
       if (window.location.pathname !== targetUrl) {
@@ -84,8 +79,7 @@ export function App() {
   };
 
   const handleOpenCanvasFromCalendar = (canvasId: string) => {
-    canvasRepository.setActiveCanvasId(canvasId);
-    setActiveCanvasId(canvasId);
+    canvasManager.switchCanvas(canvasId);
     handleNavigate("canvas");
   };
 
@@ -101,12 +95,12 @@ export function App() {
         <CalendarPage
           onNavigate={handleNavigate}
           onOpenCanvas={handleOpenCanvasFromCalendar}
+          canvasManager={canvasManager}
         />
       ) : (
         <CanvasPage
           onNavigate={handleNavigate}
-          activeCanvasId={activeCanvasId}
-          onSelectCanvas={(id) => setActiveCanvasId(id)}
+          canvasManager={canvasManager}
         />
       )}
     </RootLayout>

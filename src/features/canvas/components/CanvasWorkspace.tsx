@@ -12,22 +12,22 @@ import { CanvasMenu } from "@/src/features/canvas/components/CanvasMenu";
 import { ConvertTaskDialog } from "@/src/features/canvas/components/ConvertTaskDialog";
 import { ShareCanvasDialog } from "@/src/features/canvas/components/ShareCanvasDialog";
 import { RouteMode } from "@/src/types";
-import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
+import { CanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 import {
-  CANVAS_BOARD_BACKGROUND,
-  cleanAppStateForStorage,
-} from "@/src/features/canvas/repositories/canvasRepository";
+  applyAppStateToExcalidraw,
+  createFlowBoardAppState,
+  createScenePayload,
+  hasFlowBoardCanvasBackground,
+} from "@/src/features/canvas/adapters/canvasSceneAdapter";
 
 interface CanvasWorkspaceProps {
   onModeChange: (mode: RouteMode) => void;
-  activeCanvasId?: string;
-  onSelectCanvas?: (id: string) => void;
+  canvasManager: CanvasManager;
 }
 
 export function CanvasWorkspace({
   onModeChange,
-  activeCanvasId: propActiveCanvasId,
-  onSelectCanvas: propOnSelectCanvas,
+  canvasManager,
 }: CanvasWorkspaceProps) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [convertOpen, setConvertOpen] = React.useState(false);
@@ -45,55 +45,31 @@ export function CanvasWorkspace({
     renameCanvas,
     deleteCanvas,
     isProgrammaticUpdateRef,
-  } = useCanvasManager(propActiveCanvasId);
+  } = canvasManager;
 
-  // Sync external prop if provided
-  React.useEffect(() => {
-    if (propActiveCanvasId && propActiveCanvasId !== activeCanvasId) {
-      switchCanvas(propActiveCanvasId, excalidrawAPI);
-    }
-  }, [propActiveCanvasId, activeCanvasId, switchCanvas, excalidrawAPI]);
-
-  const applyDarkCanvasAppearance = React.useCallback(() => {
+  const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
     if (!excalidrawAPI) return;
 
     isProgrammaticUpdateRef.current = true;
-    excalidrawAPI.updateScene({
-      appState: {
-        ...cleanAppStateForStorage(activeCanvas.sceneData?.appState),
-        theme: "dark",
-        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-      },
-    });
+    applyAppStateToExcalidraw(excalidrawAPI, appState);
 
     window.setTimeout(() => {
       isProgrammaticUpdateRef.current = false;
     }, 150);
-  }, [activeCanvas.sceneData?.appState, excalidrawAPI, isProgrammaticUpdateRef]);
+  }, [excalidrawAPI, isProgrammaticUpdateRef]);
 
   React.useEffect(() => {
     if (!excalidrawAPI) return;
 
-    applyDarkCanvasAppearance();
-    const restoreSyncTimer = window.setTimeout(applyDarkCanvasAppearance, 250);
-
-    return () => {
-      window.clearTimeout(restoreSyncTimer);
-    };
+    applyDarkCanvasAppearance(activeCanvas.sceneData?.appState);
   }, [activeCanvas.id, applyDarkCanvasAppearance, excalidrawAPI]);
 
   const handleSelectCanvas = (id: string) => {
     switchCanvas(id, excalidrawAPI);
-    if (propOnSelectCanvas) {
-      propOnSelectCanvas(id);
-    }
   };
 
   const handleCreateCanvas = () => {
-    const created = createCanvas(excalidrawAPI);
-    if (created && propOnSelectCanvas) {
-      propOnSelectCanvas(created.id);
-    }
+    createCanvas(excalidrawAPI);
   };
 
   const handleDeleteCanvas = (id: string) => {
@@ -108,24 +84,12 @@ export function CanvasWorkspace({
           key={activeCanvas.id}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
-          initialData={{
-            elements: (activeCanvas.sceneData?.elements || []) as any,
-            appState: {
-              ...cleanAppStateForStorage(activeCanvas.sceneData?.appState),
-              theme: "dark",
-              viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-            },
-            files: (activeCanvas.sceneData?.files || {}) as any,
-          }}
+          initialData={createScenePayload(activeCanvas.sceneData) as any}
           onChange={(elements, appState, files) => {
-            const flowBoardAppState = {
-              ...appState,
-              theme: "dark",
-              viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-            };
+            const flowBoardAppState = createFlowBoardAppState(appState);
 
-            if (appState.viewBackgroundColor !== CANVAS_BOARD_BACKGROUND) {
-              applyDarkCanvasAppearance();
+            if (!hasFlowBoardCanvasBackground(appState)) {
+              applyDarkCanvasAppearance(appState);
             }
 
             handleSceneChange(elements, flowBoardAppState, files);

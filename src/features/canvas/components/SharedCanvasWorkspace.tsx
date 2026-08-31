@@ -3,12 +3,15 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { Eye, Edit3, Lock, AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
-import {
-  CANVAS_BOARD_BACKGROUND,
-  canvasRepository,
-  cleanAppStateForStorage,
-} from "@/src/features/canvas/repositories/canvasRepository";
+import { canvasRepository } from "@/src/features/canvas/repositories/canvasRepository";
 import { shareRepository } from "@/src/features/canvas/repositories/shareRepository";
+import {
+  applyAppStateToExcalidraw,
+  createFlowBoardAppState,
+  createScenePayload,
+  hasFlowBoardCanvasBackground,
+  normalizeSceneForStorage,
+} from "@/src/features/canvas/adapters/canvasSceneAdapter";
 
 interface SharedCanvasWorkspaceProps {
   canvasId: string;
@@ -47,16 +50,7 @@ export function SharedCanvasWorkspace({
   // Stable initial data for Excalidraw - created ONCE per canvas / viewMode
   const initialData = React.useMemo(() => {
     if (!targetCanvas) return null;
-    return {
-      elements: (targetCanvas.sceneData?.elements || []) as any,
-      appState: {
-        ...cleanAppStateForStorage(targetCanvas.sceneData?.appState),
-        theme: "dark" as const,
-        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-        viewModeEnabled: isViewOnly,
-      },
-      files: (targetCanvas.sceneData?.files || {}) as any,
-    };
+    return createScenePayload(targetCanvas.sceneData, { viewModeEnabled: isViewOnly });
   }, [canvasId, isViewOnly, targetCanvas]);
 
   // Refs for debounced storage saving in Edit mode without triggering React re-renders
@@ -80,11 +74,7 @@ export function SharedCanvasWorkspace({
       if (c.id !== canvasId) return c;
       return {
         ...c,
-        sceneData: {
-          elements: [...elements],
-          appState: cleanAppStateForStorage(appState),
-          files: { ...files },
-        },
+        sceneData: normalizeSceneForStorage(elements, appState, files),
         updatedAt: new Date().toISOString(),
       };
     });
@@ -99,43 +89,29 @@ export function SharedCanvasWorkspace({
     };
   }, [flushSceneToStorage]);
 
-  const applyDarkCanvasAppearance = React.useCallback(() => {
-    if (!excalidrawAPI || !targetCanvas) return;
+  const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
+    if (!excalidrawAPI) return;
 
-    excalidrawAPI.updateScene({
-      appState: {
-        ...cleanAppStateForStorage(targetCanvas.sceneData?.appState),
-        theme: "dark",
-        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-        viewModeEnabled: isViewOnly,
-      },
+    applyAppStateToExcalidraw(excalidrawAPI, appState, {
+      viewModeEnabled: isViewOnly,
     });
-  }, [excalidrawAPI, isViewOnly, targetCanvas]);
+  }, [excalidrawAPI, isViewOnly]);
 
   React.useEffect(() => {
     if (!excalidrawAPI) return;
 
-    applyDarkCanvasAppearance();
-    const restoreSyncTimer = window.setTimeout(applyDarkCanvasAppearance, 250);
-
-    return () => {
-      window.clearTimeout(restoreSyncTimer);
-    };
-  }, [applyDarkCanvasAppearance, excalidrawAPI]);
+    applyDarkCanvasAppearance(targetCanvas?.sceneData?.appState);
+  }, [applyDarkCanvasAppearance, excalidrawAPI, targetCanvas?.id]);
 
   // Debounced scene change handler (zero React state updates during drawing)
   const handleSceneChange = React.useCallback(
     (elements: readonly any[], appState: any, files: any) => {
       if (isViewOnly) return;
 
-      const flowBoardAppState = {
-        ...appState,
-        theme: "dark",
-        viewBackgroundColor: CANVAS_BOARD_BACKGROUND,
-      };
+      const flowBoardAppState = createFlowBoardAppState(appState);
 
-      if (appState.viewBackgroundColor !== CANVAS_BOARD_BACKGROUND) {
-        applyDarkCanvasAppearance();
+      if (!hasFlowBoardCanvasBackground(appState)) {
+        applyDarkCanvasAppearance(appState);
       }
 
       pendingSceneRef.current = {
