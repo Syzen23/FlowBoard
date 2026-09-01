@@ -8,37 +8,37 @@ import {
   updateTask,
 } from "./task.service.js";
 
-export function getTasksController(_req: Request, res: Response): void {
-  res.status(200).json(listTasks());
+export async function getTasksController(_req: Request, res: Response): Promise<void> {
+  res.status(200).json(await listTasks());
 }
 
-export function getTaskController(req: Request, res: Response): void {
+export async function getTaskController(req: Request, res: Response): Promise<void> {
   try {
-    res.status(200).json(getTaskById(getRouteParam(req, "id")));
+    res.status(200).json(await getTaskById(getRouteParam(req, "id")));
   } catch (error) {
     handleControllerError(res, error);
   }
 }
 
-export function createTaskController(req: Request, res: Response): void {
+export async function createTaskController(req: Request, res: Response): Promise<void> {
   try {
-    res.status(201).json(createTask(req.body));
+    res.status(201).json(await createTask(req.body));
   } catch (error) {
     handleControllerError(res, error);
   }
 }
 
-export function updateTaskController(req: Request, res: Response): void {
+export async function updateTaskController(req: Request, res: Response): Promise<void> {
   try {
-    res.status(200).json(updateTask(getRouteParam(req, "id"), req.body));
+    res.status(200).json(await updateTask(getRouteParam(req, "id"), req.body));
   } catch (error) {
     handleControllerError(res, error);
   }
 }
 
-export function deleteTaskController(req: Request, res: Response): void {
+export async function deleteTaskController(req: Request, res: Response): Promise<void> {
   try {
-    deleteTask(getRouteParam(req, "id"));
+    await deleteTask(getRouteParam(req, "id"));
     res.status(204).send();
   } catch (error) {
     handleControllerError(res, error);

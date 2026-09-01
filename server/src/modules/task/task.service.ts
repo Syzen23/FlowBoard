@@ -5,12 +5,16 @@ import type { CreateTaskInput, Task, TaskStatus, UpdateTaskInput } from "./task.
 
 const validTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "done"]);
 
-export function listTasks(): Task[] {
+export function listTasks(): Promise<Task[]> {
   return taskRepository.findAll();
 }
 
-export function getTaskById(id: string): Task {
-  const task = taskRepository.findById(id);
+export async function getTaskById(id: string): Promise<Task> {
+  if (!isUuid(id)) {
+    throw notFound("Task not found");
+  }
+
+  const task = await taskRepository.findById(id);
   if (!task) {
     throw notFound("Task not found");
   }
@@ -18,7 +22,7 @@ export function getTaskById(id: string): Task {
   return task;
 }
 
-export function createTask(input: CreateTaskInput): Task {
+export function createTask(input: CreateTaskInput): Promise<Task> {
   const title = parseRequiredString(input.title, "Task title is required");
   const dueDate = parseRequiredString(input.dueDate, "Task dueDate is required");
   const status = input.status === undefined ? "todo" : parseTaskStatus(input.status);
@@ -37,15 +41,22 @@ export function createTask(input: CreateTaskInput): Task {
   });
 }
 
-export function updateTask(id: string, input: UpdateTaskInput): Task {
-  const updates: Partial<Pick<Task, "title" | "description" | "dueDate" | "dueTime" | "status" | "canvasId">> = {};
+export async function updateTask(id: string, input: UpdateTaskInput): Promise<Task> {
+  if (!isUuid(id)) {
+    throw notFound("Task not found");
+  }
+
+  const updates: Partial<Pick<Task, "title" | "dueDate" | "status" | "canvasId">> & {
+    description?: string | null;
+    dueTime?: string | null;
+  } = {};
 
   if (input.title !== undefined) {
     updates.title = parseRequiredString(input.title, "Task title cannot be empty");
   }
 
   if (input.description !== undefined) {
-    updates.description = parseOptionalString(input.description);
+    updates.description = parseOptionalString(input.description) ?? null;
   }
 
   if (input.dueDate !== undefined) {
@@ -53,7 +64,7 @@ export function updateTask(id: string, input: UpdateTaskInput): Task {
   }
 
   if (input.dueTime !== undefined) {
-    updates.dueTime = parseOptionalString(input.dueTime);
+    updates.dueTime = parseOptionalString(input.dueTime) ?? null;
   }
 
   if (input.status !== undefined) {
@@ -64,7 +75,7 @@ export function updateTask(id: string, input: UpdateTaskInput): Task {
     updates.canvasId = parseCanvasId(input.canvasId);
   }
 
-  const task = taskRepository.update(id, updates);
+  const task = await taskRepository.update(id, updates);
   if (!task) {
     throw notFound("Task not found");
   }
@@ -72,8 +83,12 @@ export function updateTask(id: string, input: UpdateTaskInput): Task {
   return task;
 }
 
-export function deleteTask(id: string): void {
-  const deleted = taskRepository.remove(id);
+export async function deleteTask(id: string): Promise<void> {
+  if (!isUuid(id)) {
+    throw notFound("Task not found");
+  }
+
+  const deleted = await taskRepository.remove(id);
   if (!deleted) {
     throw notFound("Task not found");
   }
@@ -118,5 +133,17 @@ function parseCanvasId(value: unknown): string | null {
   }
 
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (!isUuid(trimmed)) {
+    throw badRequest("Task canvasId must be a valid UUID or null");
+  }
+
+  return trimmed;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -14,12 +14,16 @@ const emptySceneData: CanvasSceneData = {
   files: {},
 };
 
-export function listCanvases(): Canvas[] {
+export function listCanvases(): Promise<Canvas[]> {
   return canvasRepository.findAll();
 }
 
-export function getCanvasById(id: string): Canvas {
-  const canvas = canvasRepository.findById(id);
+export async function getCanvasById(id: string): Promise<Canvas> {
+  if (!isUuid(id)) {
+    throw notFound("Canvas not found");
+  }
+
+  const canvas = await canvasRepository.findById(id);
   if (!canvas) {
     throw notFound("Canvas not found");
   }
@@ -27,7 +31,7 @@ export function getCanvasById(id: string): Canvas {
   return canvas;
 }
 
-export function createCanvas(input: CreateCanvasInput): Canvas {
+export function createCanvas(input: CreateCanvasInput): Promise<Canvas> {
   const title = parseRequiredTitle(input.title, "Canvas title is required");
   const sceneData = input.sceneData === undefined ? emptySceneData : parseSceneData(input.sceneData);
   const now = new Date().toISOString();
@@ -41,7 +45,11 @@ export function createCanvas(input: CreateCanvasInput): Canvas {
   });
 }
 
-export function updateCanvas(id: string, input: UpdateCanvasInput): Canvas {
+export async function updateCanvas(id: string, input: UpdateCanvasInput): Promise<Canvas> {
+  if (!isUuid(id)) {
+    throw notFound("Canvas not found");
+  }
+
   const updates: Partial<Pick<Canvas, "title" | "sceneData">> = {};
 
   if (input.title !== undefined) {
@@ -52,7 +60,7 @@ export function updateCanvas(id: string, input: UpdateCanvasInput): Canvas {
     updates.sceneData = parseSceneData(input.sceneData);
   }
 
-  const canvas = canvasRepository.update(id, updates);
+  const canvas = await canvasRepository.update(id, updates);
   if (!canvas) {
     throw notFound("Canvas not found");
   }
@@ -60,8 +68,12 @@ export function updateCanvas(id: string, input: UpdateCanvasInput): Canvas {
   return canvas;
 }
 
-export function deleteCanvas(id: string): void {
-  const deleted = canvasRepository.remove(id);
+export async function deleteCanvas(id: string): Promise<void> {
+  if (!isUuid(id)) {
+    throw notFound("Canvas not found");
+  }
+
+  const deleted = await canvasRepository.remove(id);
   if (!deleted) {
     throw notFound("Canvas not found");
   }
@@ -105,4 +117,8 @@ function parseSceneData(value: unknown): CanvasSceneData {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

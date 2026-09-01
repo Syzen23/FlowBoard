@@ -1,9 +1,11 @@
 import dotenv from "dotenv";
-import pg, { type Pool, type QueryResult } from "pg";
+import pg, { type Pool, type QueryResult, type QueryResultRow } from "pg";
 
 dotenv.config();
 
 const { Pool: PgPool } = pg;
+
+pg.types.setTypeParser(1082, (value) => value);
 
 let pool: Pool | null = null;
 
@@ -23,6 +25,9 @@ function getPool(): Pool {
 }
 
 export const db = {
-  query: (text: string, values?: unknown[]): Promise<QueryResult> => getPool().query(text, values),
+  query: <T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: unknown[]
+  ): Promise<QueryResult<T>> => getPool().query<T>(text, values),
   end: () => (pool ? pool.end() : Promise.resolve()),
 };
