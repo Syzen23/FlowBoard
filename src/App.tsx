@@ -6,6 +6,7 @@ import CalendarPage from "@/src/app/app/calendar/page";
 import SharePage from "@/src/app/app/share/page";
 import { RouteMode } from "@/src/types";
 import { useCanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
+import { AuthGate } from "@/src/features/auth/AuthGate";
 
 export function App() {
   const canvasManager = useCanvasManager();
@@ -35,34 +36,36 @@ export function App() {
 
   return (
     <RootLayout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/app/canvas" replace />} />
-        <Route path="/app" element={<Navigate to="/app/canvas" replace />} />
-        <Route
-          path="/app/canvas"
-          element={
-            <CanvasPage
-              onNavigate={handleNavigate}
-              canvasManager={canvasManager}
-            />
-          }
-        />
-        <Route
-          path="/app/calendar"
-          element={
-            <CalendarPage
-              onNavigate={handleNavigate}
-              onOpenCanvas={handleOpenCanvasFromCalendar}
-              canvasManager={canvasManager}
-            />
-          }
-        />
-        <Route
-          path="/app/share/:canvasId"
-          element={<ShareRoute onReturnToApp={() => handleNavigate("canvas")} />}
-        />
-        <Route path="*" element={<Navigate to="/app/canvas" replace />} />
-      </Routes>
+      <AuthGate>
+        <Routes>
+          <Route path="/" element={<Navigate to="/app/canvas" replace />} />
+          <Route path="/app" element={<Navigate to="/app/canvas" replace />} />
+          <Route
+            path="/app/canvas"
+            element={
+              <CanvasPage
+                onNavigate={handleNavigate}
+                canvasManager={canvasManager}
+              />
+            }
+          />
+          <Route
+            path="/app/calendar"
+            element={
+              <CalendarPage
+                onNavigate={handleNavigate}
+                onOpenCanvas={handleOpenCanvasFromCalendar}
+                canvasManager={canvasManager}
+              />
+            }
+          />
+          <Route
+            path="/app/share/:canvasId"
+            element={<ShareRoute onReturnToApp={() => handleNavigate("canvas")} />}
+          />
+          <Route path="*" element={<Navigate to="/app/canvas" replace />} />
+        </Routes>
+      </AuthGate>
     </RootLayout>
   );
 }

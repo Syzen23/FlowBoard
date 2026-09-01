@@ -108,10 +108,14 @@ function parseSceneData(value: unknown): CanvasSceneData {
     throw badRequest("Canvas sceneData.files must be an object");
   }
 
+  const normalizedElements: unknown[] = Array.isArray(elements) ? elements : [];
+  const normalizedAppState: Record<string, unknown> = isRecord(appState) ? appState : {};
+  const normalizedFiles: Record<string, unknown> = isRecord(files) ? files : {};
+
   return {
-    elements: elements || [],
-    appState: appState || {},
-    files: files || {},
+    elements: normalizedElements,
+    appState: normalizedAppState,
+    files: normalizedFiles,
   };
 }
 

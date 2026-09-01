@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../database/db.js";
+import { authRouter } from "../modules/auth/auth.routes.js";
 import { canvasRouter } from "../modules/canvas/canvas.routes.js";
 import { taskRouter } from "../modules/task/task.routes.js";
 
@@ -24,5 +25,6 @@ apiRouter.get("/health/db", async (_req, res, next) => {
   }
 });
 
+apiRouter.use("/auth", authRouter);
 apiRouter.use("/canvases", canvasRouter);
 apiRouter.use("/tasks", taskRouter);
