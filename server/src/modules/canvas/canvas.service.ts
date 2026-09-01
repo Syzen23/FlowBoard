@@ -14,16 +14,16 @@ const emptySceneData: CanvasSceneData = {
   files: {},
 };
 
-export function listCanvases(): Promise<Canvas[]> {
-  return canvasRepository.findAll();
+export function listCanvases(ownerId: string): Promise<Canvas[]> {
+  return canvasRepository.findAll(ownerId);
 }
 
-export async function getCanvasById(id: string): Promise<Canvas> {
+export async function getCanvasById(ownerId: string, id: string): Promise<Canvas> {
   if (!isUuid(id)) {
     throw notFound("Canvas not found");
   }
 
-  const canvas = await canvasRepository.findById(id);
+  const canvas = await canvasRepository.findById(ownerId, id);
   if (!canvas) {
     throw notFound("Canvas not found");
   }
@@ -31,12 +31,12 @@ export async function getCanvasById(id: string): Promise<Canvas> {
   return canvas;
 }
 
-export function createCanvas(input: CreateCanvasInput): Promise<Canvas> {
+export function createCanvas(ownerId: string, input: CreateCanvasInput): Promise<Canvas> {
   const title = parseRequiredTitle(input.title, "Canvas title is required");
   const sceneData = input.sceneData === undefined ? emptySceneData : parseSceneData(input.sceneData);
   const now = new Date().toISOString();
 
-  return canvasRepository.create({
+  return canvasRepository.create(ownerId, {
     id: randomUUID(),
     title,
     sceneData,
@@ -45,7 +45,7 @@ export function createCanvas(input: CreateCanvasInput): Promise<Canvas> {
   });
 }
 
-export async function updateCanvas(id: string, input: UpdateCanvasInput): Promise<Canvas> {
+export async function updateCanvas(ownerId: string, id: string, input: UpdateCanvasInput): Promise<Canvas> {
   if (!isUuid(id)) {
     throw notFound("Canvas not found");
   }
@@ -60,7 +60,7 @@ export async function updateCanvas(id: string, input: UpdateCanvasInput): Promis
     updates.sceneData = parseSceneData(input.sceneData);
   }
 
-  const canvas = await canvasRepository.update(id, updates);
+  const canvas = await canvasRepository.update(ownerId, id, updates);
   if (!canvas) {
     throw notFound("Canvas not found");
   }
@@ -68,12 +68,12 @@ export async function updateCanvas(id: string, input: UpdateCanvasInput): Promis
   return canvas;
 }
 
-export async function deleteCanvas(id: string): Promise<void> {
+export async function deleteCanvas(ownerId: string, id: string): Promise<void> {
   if (!isUuid(id)) {
     throw notFound("Canvas not found");
   }
 
-  const deleted = await canvasRepository.remove(id);
+  const deleted = await canvasRepository.remove(ownerId, id);
   if (!deleted) {
     throw notFound("Canvas not found");
   }

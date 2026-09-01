@@ -19,36 +19,41 @@ type TaskUpdateData = Partial<Omit<Task, "id" | "createdAt" | "description" | "d
 };
 
 export const taskRepository = {
-  async findAll(): Promise<Task[]> {
+  async findAll(ownerId: string): Promise<Task[]> {
     const result = await db.query<TaskRow>(
       `SELECT id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at
        FROM tasks
+       WHERE owner_id = $1
        ORDER BY created_at ASC`
+      ,
+      [ownerId]
     );
 
     return result.rows.map(mapTaskRow);
   },
 
-  async findById(id: string): Promise<Task | null> {
+  async findById(ownerId: string, id: string): Promise<Task | null> {
     const result = await db.query<TaskRow>(
       `SELECT id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at
        FROM tasks
-       WHERE id = $1`,
-      [id]
+       WHERE id = $1
+         AND owner_id = $2`,
+      [id, ownerId]
     );
 
     return result.rows[0] ? mapTaskRow(result.rows[0]) : null;
   },
 
-  async create(task: Task): Promise<Task> {
+  async create(ownerId: string, task: Task): Promise<Task> {
     const result = await db.query<TaskRow>(
       `INSERT INTO tasks (
-         id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at
+         id, owner_id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at`,
       [
         task.id,
+        ownerId,
         task.title,
         task.description ?? null,
         task.dueDate,
@@ -63,7 +68,7 @@ export const taskRepository = {
     return mapTaskRow(result.rows[0]);
   },
 
-  async update(id: string, updates: TaskUpdateData): Promise<Task | null> {
+  async update(ownerId: string, id: string, updates: TaskUpdateData): Promise<Task | null> {
     const setClauses = ["updated_at = NOW()"];
     const values: unknown[] = [];
 
@@ -99,11 +104,14 @@ export const taskRepository = {
 
     values.push(id);
     const idParam = values.length;
+    values.push(ownerId);
+    const ownerIdParam = values.length;
 
     const result = await db.query<TaskRow>(
       `UPDATE tasks
        SET ${setClauses.join(", ")}
        WHERE id = $${idParam}
+         AND owner_id = $${ownerIdParam}
        RETURNING id, title, description, due_date, due_time, status, canvas_id, created_at, updated_at`,
       values
     );
@@ -111,8 +119,13 @@ export const taskRepository = {
     return result.rows[0] ? mapTaskRow(result.rows[0]) : null;
   },
 
-  async remove(id: string): Promise<boolean> {
-    const result = await db.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+  async remove(ownerId: string, id: string): Promise<boolean> {
+    const result = await db.query(
+      `DELETE FROM tasks
+       WHERE id = $1
+         AND owner_id = $2`,
+      [id, ownerId]
+    );
     return (result.rowCount ?? 0) > 0;
   },
 };

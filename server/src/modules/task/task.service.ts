@@ -1,20 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { badRequest, notFound } from "../../lib/httpError.js";
+import { canvasRepository } from "../canvas/canvas.repository.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 const validTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "done"]);
 
-export function listTasks(): Promise<Task[]> {
-  return taskRepository.findAll();
+export function listTasks(ownerId: string): Promise<Task[]> {
+  return taskRepository.findAll(ownerId);
 }
 
-export async function getTaskById(id: string): Promise<Task> {
+export async function getTaskById(ownerId: string, id: string): Promise<Task> {
   if (!isUuid(id)) {
     throw notFound("Task not found");
   }
 
-  const task = await taskRepository.findById(id);
+  const task = await taskRepository.findById(ownerId, id);
   if (!task) {
     throw notFound("Task not found");
   }
@@ -22,26 +23,29 @@ export async function getTaskById(id: string): Promise<Task> {
   return task;
 }
 
-export function createTask(input: CreateTaskInput): Promise<Task> {
+export async function createTask(ownerId: string, input: CreateTaskInput): Promise<Task> {
   const title = parseRequiredString(input.title, "Task title is required");
   const dueDate = parseRequiredString(input.dueDate, "Task dueDate is required");
   const status = input.status === undefined ? "todo" : parseTaskStatus(input.status);
+  const canvasId = parseCanvasId(input.canvasId);
   const now = new Date().toISOString();
 
-  return taskRepository.create({
+  await assertCanvasBelongsToOwner(ownerId, canvasId);
+
+  return taskRepository.create(ownerId, {
     id: randomUUID(),
     title,
     description: parseOptionalString(input.description),
     dueDate,
     dueTime: parseOptionalString(input.dueTime),
     status,
-    canvasId: parseCanvasId(input.canvasId),
+    canvasId,
     createdAt: now,
     updatedAt: now,
   });
 }
 
-export async function updateTask(id: string, input: UpdateTaskInput): Promise<Task> {
+export async function updateTask(ownerId: string, id: string, input: UpdateTaskInput): Promise<Task> {
   if (!isUuid(id)) {
     throw notFound("Task not found");
   }
@@ -73,9 +77,10 @@ export async function updateTask(id: string, input: UpdateTaskInput): Promise<Ta
 
   if (input.canvasId !== undefined) {
     updates.canvasId = parseCanvasId(input.canvasId);
+    await assertCanvasBelongsToOwner(ownerId, updates.canvasId);
   }
 
-  const task = await taskRepository.update(id, updates);
+  const task = await taskRepository.update(ownerId, id, updates);
   if (!task) {
     throw notFound("Task not found");
   }
@@ -83,14 +88,25 @@ export async function updateTask(id: string, input: UpdateTaskInput): Promise<Ta
   return task;
 }
 
-export async function deleteTask(id: string): Promise<void> {
+export async function deleteTask(ownerId: string, id: string): Promise<void> {
   if (!isUuid(id)) {
     throw notFound("Task not found");
   }
 
-  const deleted = await taskRepository.remove(id);
+  const deleted = await taskRepository.remove(ownerId, id);
   if (!deleted) {
     throw notFound("Task not found");
+  }
+}
+
+async function assertCanvasBelongsToOwner(ownerId: string, canvasId: string | null): Promise<void> {
+  if (canvasId === null) {
+    return;
+  }
+
+  const canvas = await canvasRepository.findById(ownerId, canvasId);
+  if (!canvas) {
+    throw notFound("Canvas not found");
   }
 }
 

@@ -10,34 +10,39 @@ type CanvasRow = {
 };
 
 export const canvasRepository = {
-  async findAll(): Promise<Canvas[]> {
+  async findAll(ownerId: string): Promise<Canvas[]> {
     const result = await db.query<CanvasRow>(
       `SELECT id, title, scene_data, created_at, updated_at
        FROM canvases
+       WHERE owner_id = $1
        ORDER BY created_at ASC`
+      ,
+      [ownerId]
     );
 
     return result.rows.map(mapCanvasRow);
   },
 
-  async findById(id: string): Promise<Canvas | null> {
+  async findById(ownerId: string, id: string): Promise<Canvas | null> {
     const result = await db.query<CanvasRow>(
       `SELECT id, title, scene_data, created_at, updated_at
        FROM canvases
-       WHERE id = $1`,
-      [id]
+       WHERE id = $1
+         AND owner_id = $2`,
+      [id, ownerId]
     );
 
     return result.rows[0] ? mapCanvasRow(result.rows[0]) : null;
   },
 
-  async create(canvas: Canvas): Promise<Canvas> {
+  async create(ownerId: string, canvas: Canvas): Promise<Canvas> {
     const result = await db.query<CanvasRow>(
-      `INSERT INTO canvases (id, title, scene_data, created_at, updated_at)
-       VALUES ($1, $2, $3::jsonb, $4, $5)
+      `INSERT INTO canvases (id, owner_id, title, scene_data, created_at, updated_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6)
        RETURNING id, title, scene_data, created_at, updated_at`,
       [
         canvas.id,
+        ownerId,
         canvas.title,
         JSON.stringify(canvas.sceneData),
         canvas.createdAt,
@@ -48,7 +53,11 @@ export const canvasRepository = {
     return mapCanvasRow(result.rows[0]);
   },
 
-  async update(id: string, updates: Partial<Omit<Canvas, "id" | "createdAt">>): Promise<Canvas | null> {
+  async update(
+    ownerId: string,
+    id: string,
+    updates: Partial<Omit<Canvas, "id" | "createdAt">>
+  ): Promise<Canvas | null> {
     const setClauses = ["updated_at = NOW()"];
     const values: unknown[] = [];
 
@@ -64,11 +73,14 @@ export const canvasRepository = {
 
     values.push(id);
     const idParam = values.length;
+    values.push(ownerId);
+    const ownerIdParam = values.length;
 
     const result = await db.query<CanvasRow>(
       `UPDATE canvases
        SET ${setClauses.join(", ")}
        WHERE id = $${idParam}
+         AND owner_id = $${ownerIdParam}
        RETURNING id, title, scene_data, created_at, updated_at`,
       values
     );
@@ -76,8 +88,13 @@ export const canvasRepository = {
     return result.rows[0] ? mapCanvasRow(result.rows[0]) : null;
   },
 
-  async remove(id: string): Promise<boolean> {
-    const result = await db.query(`DELETE FROM canvases WHERE id = $1`, [id]);
+  async remove(ownerId: string, id: string): Promise<boolean> {
+    const result = await db.query(
+      `DELETE FROM canvases
+       WHERE id = $1
+         AND owner_id = $2`,
+      [id, ownerId]
+    );
     return (result.rowCount ?? 0) > 0;
   },
 };
