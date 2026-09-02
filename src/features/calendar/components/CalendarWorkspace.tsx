@@ -373,8 +373,8 @@ export function CalendarWorkspace({
         onSelectCanvas={(id) => {
           if (onOpenCanvas) onOpenCanvas(id);
         }}
-        onCreateCanvas={() => {
-          const created = createCanvas();
+        onCreateCanvas={async () => {
+          const created = await createCanvas();
           if (created && onOpenCanvas) {
             onOpenCanvas(created.id);
           }

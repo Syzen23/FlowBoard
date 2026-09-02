@@ -28,7 +28,7 @@ export function App() {
 
   const handleOpenCanvasFromCalendar = React.useCallback(
     (canvasId: string) => {
-      canvasManager.switchCanvas(canvasId);
+      void canvasManager.switchCanvas(canvasId);
       navigate("/app/canvas");
     },
     [canvasManager, navigate]

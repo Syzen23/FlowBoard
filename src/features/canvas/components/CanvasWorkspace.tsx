@@ -43,6 +43,9 @@ export function CanvasWorkspace({
     activeCanvas,
     activeCanvasId,
     saveStatus,
+    isLoading,
+    isInitialized,
+    error,
     handleSceneChange,
     switchCanvas,
     createCanvas,
@@ -69,16 +72,29 @@ export function CanvasWorkspace({
   }, [activeCanvas.id, applyDarkCanvasAppearance, excalidrawAPI]);
 
   const handleSelectCanvas = (id: string) => {
-    switchCanvas(id, excalidrawAPI);
+    void switchCanvas(id, excalidrawAPI);
   };
 
   const handleCreateCanvas = () => {
-    createCanvas(excalidrawAPI);
+    void createCanvas(excalidrawAPI);
   };
 
   const handleDeleteCanvas = (id: string) => {
-    deleteCanvas(id, excalidrawAPI);
+    void deleteCanvas(id, excalidrawAPI);
   };
+
+  if (isLoading || !isInitialized) {
+    return (
+      <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex items-center justify-center overflow-hidden select-none">
+        <div className="text-center">
+          <div className="w-8 h-8 mx-auto mb-3 rounded-full border-2 border-zinc-700 border-t-orange-500 animate-spin" />
+          <p className="text-xs text-zinc-400">
+            {error ? "Unable to load canvases." : "Loading canvases..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
@@ -139,15 +155,33 @@ export function CanvasWorkspace({
             {/* Subtle Autosave Status */}
             <span
               className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#18181b]/80 border border-zinc-800/60 backdrop-blur-xs flex items-center gap-1.5 transition-all duration-200"
-              title={saveStatus === "saving" ? "Saving changes to browser storage..." : "All changes saved locally"}
+              title={
+                saveStatus === "saving"
+                  ? "Saving changes..."
+                  : saveStatus === "error"
+                  ? "Autosave failed"
+                  : "All changes saved"
+              }
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  saveStatus === "saving" ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+                  saveStatus === "saving"
+                    ? "bg-amber-400 animate-pulse"
+                    : saveStatus === "error"
+                    ? "bg-red-400"
+                    : "bg-emerald-400"
                 }`}
               />
-              <span className={saveStatus === "saving" ? "text-amber-300/90" : "text-zinc-400"}>
-                {saveStatus === "saving" ? "Saving..." : "Saved"}
+              <span
+                className={
+                  saveStatus === "saving"
+                    ? "text-amber-300/90"
+                    : saveStatus === "error"
+                    ? "text-red-300/90"
+                    : "text-zinc-400"
+                }
+              >
+                {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Save failed" : "Saved"}
               </span>
             </span>
           </div>

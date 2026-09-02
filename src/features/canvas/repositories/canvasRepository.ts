@@ -1,4 +1,5 @@
 import type { CanvasWorkspace } from "@/src/types";
+import { apiClient } from "@/src/lib/apiClient";
 import {
   CANVAS_BOARD_BACKGROUND,
   CANVAS_DEFAULT_FILL_COLOR,
@@ -6,10 +7,7 @@ import {
   MAX_CANVASES,
   MIN_CANVASES,
   cleanAppStateForStorage,
-  createNewCanvas,
-  loadCanvasesFromStorage,
   loadCurrentCanvasIdFromStorage,
-  saveCanvasesToStorage,
   saveCurrentCanvasIdToStorage,
 } from "@/src/features/canvas/utils/canvasStorage";
 
@@ -23,36 +21,32 @@ export {
 };
 
 export const canvasRepository = {
-  getAll(): CanvasWorkspace[] {
-    return loadCanvasesFromStorage();
+  getAll(): Promise<CanvasWorkspace[]> {
+    return apiClient.get<CanvasWorkspace[]>("/canvases");
   },
 
-  getById(id: string): CanvasWorkspace | null {
-    return loadCanvasesFromStorage().find((canvas) => canvas.id === id) || null;
+  getById(id: string): Promise<CanvasWorkspace> {
+    return apiClient.get<CanvasWorkspace>(`/canvases/${id}`);
   },
 
-  save(canvases: CanvasWorkspace[]): void {
-    saveCanvasesToStorage(canvases);
+  create(title: string = "Untitled Canvas"): Promise<CanvasWorkspace> {
+    return apiClient.post<CanvasWorkspace, { title: string }>("/canvases", {
+      title: title.trim() || "Untitled Canvas",
+    });
   },
 
-  create(title: string = "Untitled Canvas"): CanvasWorkspace {
-    return createNewCanvas(title);
-  },
-
-  update(id: string, updates: Partial<CanvasWorkspace>): CanvasWorkspace[] {
-    const updatedCanvases = loadCanvasesFromStorage().map((canvas) =>
-      canvas.id === id
-        ? { ...canvas, ...updates, id, updatedAt: updates.updatedAt || new Date().toISOString() }
-        : canvas
+  update(
+    id: string,
+    updates: Partial<Pick<CanvasWorkspace, "title" | "sceneData">>
+  ): Promise<CanvasWorkspace> {
+    return apiClient.patch<CanvasWorkspace, Partial<Pick<CanvasWorkspace, "title" | "sceneData">>>(
+      `/canvases/${id}`,
+      updates
     );
-    saveCanvasesToStorage(updatedCanvases);
-    return updatedCanvases;
   },
 
-  delete(id: string): CanvasWorkspace[] {
-    const updatedCanvases = loadCanvasesFromStorage().filter((canvas) => canvas.id !== id);
-    saveCanvasesToStorage(updatedCanvases);
-    return updatedCanvases;
+  delete(id: string): Promise<void> {
+    return apiClient.delete(`/canvases/${id}`);
   },
 
   getActiveCanvasId(validCanvasIds: string[]): string {
