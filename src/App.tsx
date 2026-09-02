@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import RootLayout from "@/src/app/layout";
 import CanvasPage from "@/src/app/app/canvas/page";
 import CalendarPage from "@/src/app/app/calendar/page";
@@ -17,8 +17,6 @@ export function App() {
       const targetUrl =
         newMode === "calendar"
           ? "/app/calendar"
-          : newMode === "share"
-          ? `/app/share/${canvasManager.activeCanvasId}?permission=view`
           : "/app/canvas";
 
       navigate(targetUrl);
@@ -60,7 +58,7 @@ export function App() {
             }
           />
           <Route
-            path="/app/share/:canvasId"
+            path="/app/share/:token"
             element={<ShareRoute onReturnToApp={() => handleNavigate("canvas")} />}
           />
           <Route path="*" element={<Navigate to="/app/canvas" replace />} />
@@ -75,16 +73,11 @@ interface ShareRouteProps {
 }
 
 function ShareRoute({ onReturnToApp }: ShareRouteProps) {
-  const { canvasId = "" } = useParams();
-  const [searchParams] = useSearchParams();
-  const permissionParam = searchParams.get("permission");
-  const permission =
-    permissionParam === "edit" ? "edit" : permissionParam === "view" ? "view" : undefined;
+  const { token = "" } = useParams();
 
   return (
     <SharePage
-      canvasId={canvasId}
-      permission={permission}
+      shareToken={token}
       onReturnToApp={onReturnToApp}
     />
   );

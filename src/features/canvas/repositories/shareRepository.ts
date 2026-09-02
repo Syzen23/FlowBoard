@@ -1,4 +1,5 @@
 import { ApiError, apiClient } from "@/src/lib/apiClient";
+import type { FlowBoardSceneData } from "@/src/features/canvas/types";
 
 export type BackendSharePermission = "view" | "edit";
 
@@ -9,6 +10,18 @@ export interface CanvasShare {
   permission: BackendSharePermission;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PublicSharedCanvas {
+  id: string;
+  title: string;
+  sceneData?: FlowBoardSceneData;
+  updatedAt: string;
+}
+
+export interface PublicShare {
+  canvas: PublicSharedCanvas;
+  permission: BackendSharePermission;
 }
 
 export const shareRepository = {
@@ -33,6 +46,12 @@ export const shareRepository = {
 
   revoke(canvasId: string): Promise<void> {
     return apiClient.delete(`/canvases/${canvasId}/share`);
+  },
+
+  getPublicShare(token: string): Promise<PublicShare> {
+    return apiClient.get<PublicShare>(`/shares/${token}`, {
+      authenticated: false,
+    });
   },
 
   buildPublicUrl(token: string): string {

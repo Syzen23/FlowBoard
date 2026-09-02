@@ -1,221 +1,143 @@
 import * as React from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
-import { Eye, Edit3, Lock, AlertCircle, ArrowLeft } from "lucide-react";
+import { Eye, Edit3, AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
-import { getCanvasShareSetting } from "@/src/features/canvas/utils/shareStorage";
+import { ApiError } from "@/src/lib/apiClient";
 import {
-  loadLegacyShareCanvasesFromStorage,
-  saveLegacyShareCanvasesToStorage,
-} from "@/src/features/canvas/utils/legacyShareCanvasStorage";
+  type PublicShare,
+  shareRepository,
+} from "@/src/features/canvas/repositories/shareRepository";
 import {
   applyAppStateToExcalidraw,
-  createFlowBoardAppState,
   createScenePayload,
-  hasFlowBoardCanvasBackground,
-  normalizeSceneForStorage,
 } from "@/src/features/canvas/adapters/canvasSceneAdapter";
 import type {
-  FlowBoardCanvasAppState,
-  FlowBoardCanvasElement,
-  FlowBoardCanvasFiles,
   FlowBoardExcalidrawAPI,
   FlowBoardInitialScene,
 } from "@/src/features/canvas/types";
 
 interface SharedCanvasWorkspaceProps {
-  canvasId: string;
-  initialPermission?: "view" | "edit";
+  shareToken: string;
   onReturnToApp?: () => void;
 }
 
 export function SharedCanvasWorkspace({
-  canvasId,
-  initialPermission,
+  shareToken,
   onReturnToApp,
 }: SharedCanvasWorkspaceProps) {
-  // Load target canvas and share settings once / when canvasId changes
-  const targetCanvas = React.useMemo(() => {
-    return loadLegacyShareCanvasesFromStorage().find((canvas) => canvas.id === canvasId) || null;
-  }, [canvasId]);
-
-  const shareSetting = React.useMemo(() => {
-    return getCanvasShareSetting(canvasId);
-  }, [canvasId]);
-
+  const [sharedCanvas, setSharedCanvas] = React.useState<PublicShare | null>(null);
+  const [status, setStatus] = React.useState<"loading" | "success" | "not-found" | "error">("loading");
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
 
-  // Determine effective permission
-  const isPrivate = shareSetting.permission === "private";
-
-  const effectivePermission: "view" | "edit" = React.useMemo(() => {
-    if (initialPermission === "edit" || initialPermission === "view") {
-      return initialPermission;
-    }
-    return shareSetting.permission === "edit" ? "edit" : "view";
-  }, [initialPermission, shareSetting.permission]);
-
-  const isViewOnly = effectivePermission === "view";
-
-  // Stable initial data for Excalidraw - created ONCE per canvas / viewMode
-  const initialData = React.useMemo(() => {
-    if (!targetCanvas) return null;
-    return createScenePayload(targetCanvas.sceneData, {
-      viewModeEnabled: isViewOnly,
-    }) as FlowBoardInitialScene;
-  }, [canvasId, isViewOnly, targetCanvas]);
-
-  // Refs for debounced storage saving in Edit mode without triggering React re-renders
-  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const pendingSceneRef = React.useRef<{
-    elements: readonly FlowBoardCanvasElement[];
-    appState: FlowBoardCanvasAppState;
-    files: FlowBoardCanvasFiles;
-  } | null>(null);
-
-  const flushSceneToStorage = React.useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-    if (!pendingSceneRef.current || isViewOnly) return;
-
-    const { elements, appState, files } = pendingSceneRef.current;
-    const currentCanvases = loadLegacyShareCanvasesFromStorage();
-    const updatedCanvases = currentCanvases.map((c) => {
-      if (c.id !== canvasId) return c;
-      return {
-        ...c,
-        sceneData: normalizeSceneForStorage(elements, appState, files),
-        updatedAt: new Date().toISOString(),
-      };
-    });
-    saveLegacyShareCanvasesToStorage(updatedCanvases);
-    pendingSceneRef.current = null;
-  }, [canvasId, isViewOnly]);
-
-  // Flush on unmount
   React.useEffect(() => {
+    if (!shareToken) {
+      setSharedCanvas(null);
+      setStatus("not-found");
+      return;
+    }
+
+    let isCurrentRequest = true;
+    setStatus("loading");
+    setErrorMessage(null);
+
+    shareRepository
+      .getPublicShare(shareToken)
+      .then((share) => {
+        if (!isCurrentRequest) return;
+
+        setSharedCanvas(share);
+        setStatus("success");
+      })
+      .catch((error) => {
+        if (!isCurrentRequest) return;
+
+        setSharedCanvas(null);
+        if (error instanceof ApiError && error.status === 404) {
+          setStatus("not-found");
+          return;
+        }
+
+        setErrorMessage(getShareErrorMessage(error));
+        setStatus("error");
+      });
+
     return () => {
-      flushSceneToStorage();
+      isCurrentRequest = false;
     };
-  }, [flushSceneToStorage]);
+  }, [shareToken]);
+
+  const initialData = React.useMemo(() => {
+    if (!sharedCanvas) return null;
+
+    return createScenePayload(sharedCanvas.canvas.sceneData, {
+      viewModeEnabled: true,
+    }) as FlowBoardInitialScene;
+  }, [sharedCanvas]);
 
   const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
     if (!excalidrawAPI) return;
 
     applyAppStateToExcalidraw(excalidrawAPI, appState, {
-      viewModeEnabled: isViewOnly,
+      viewModeEnabled: true,
     });
-  }, [excalidrawAPI, isViewOnly]);
+  }, [excalidrawAPI]);
 
   React.useEffect(() => {
-    if (!excalidrawAPI) return;
+    if (!excalidrawAPI || !sharedCanvas) return;
 
-    applyDarkCanvasAppearance(targetCanvas?.sceneData?.appState);
-  }, [applyDarkCanvasAppearance, excalidrawAPI, targetCanvas?.id]);
+    applyDarkCanvasAppearance(sharedCanvas.canvas.sceneData?.appState);
+  }, [applyDarkCanvasAppearance, excalidrawAPI, sharedCanvas]);
 
-  // Debounced scene change handler (zero React state updates during drawing)
-  const handleSceneChange = React.useCallback(
-    (
-      elements: readonly FlowBoardCanvasElement[],
-      appState: FlowBoardCanvasAppState,
-      files: FlowBoardCanvasFiles
-    ) => {
-      if (isViewOnly) return;
-
-      const flowBoardAppState = createFlowBoardAppState(appState);
-
-      if (!hasFlowBoardCanvasBackground(appState)) {
-        applyDarkCanvasAppearance(appState);
-      }
-
-      pendingSceneRef.current = {
-        elements,
-        appState: flowBoardAppState,
-        files,
-      };
-
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-
-      debounceTimerRef.current = setTimeout(() => {
-        flushSceneToStorage();
-      }, 750);
-    },
-    [isViewOnly, flushSceneToStorage, applyDarkCanvasAppearance]
-  );
-
-  // If Canvas is not found
-  if (!targetCanvas || !initialData) {
+  if (status === "loading") {
     return (
       <div className="w-full h-screen bg-[#141416] text-zinc-100 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center text-zinc-400 mb-4 shadow-xl">
-          <AlertCircle className="w-7 h-7" />
-        </div>
-        <h1 className="text-xl font-bold text-zinc-100 mb-2">Canvas Not Found</h1>
-        <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
-          The canvas you are trying to view does not exist, may have been removed, or the link is invalid.
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            onReturnToApp?.();
-          }}
-          className="gap-2 text-xs"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Return to FlowBoard</span>
-        </Button>
+        <div className="w-8 h-8 rounded-full border-2 border-zinc-700 border-t-blue-500 animate-spin mb-4" />
+        <p className="text-xs text-zinc-400">Loading shared canvas...</p>
       </div>
     );
   }
 
-  // If Canvas is marked as private by owner
-  if (isPrivate) {
+  if (status === "not-found" || !sharedCanvas || !initialData) {
     return (
-      <div className="w-full h-screen bg-[#141416] text-zinc-100 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 shadow-xl">
-          <Lock className="w-7 h-7" />
-        </div>
-        <h1 className="text-xl font-bold text-zinc-100 mb-2">This Canvas is Private</h1>
-        <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
-          The owner of &ldquo;{targetCanvas.title}&rdquo; has set this canvas to Private. Public link access is currently disabled.
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            onReturnToApp?.();
-          }}
-          className="gap-2 text-xs"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Return to FlowBoard</span>
-        </Button>
-      </div>
+      <SharedCanvasMessage
+        icon={<AlertCircle className="w-7 h-7" />}
+        title="Canvas Not Found"
+        description="The canvas you are trying to view does not exist, may have been removed, or the link is invalid."
+        onReturnToApp={onReturnToApp}
+      />
     );
   }
+
+  if (status === "error") {
+    return (
+      <SharedCanvasMessage
+        icon={<AlertCircle className="w-7 h-7" />}
+        title="Unable to Load Canvas"
+        description={errorMessage || "The shared canvas could not be loaded. Please try again later."}
+        onReturnToApp={onReturnToApp}
+      />
+    );
+  }
+
+  const canEditLater = sharedCanvas.permission === "edit";
 
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
-      {/* Excalidraw Viewport */}
       <div className="absolute inset-0 z-0 flowboard-excalidraw">
         <Excalidraw
-          key={`${canvasId}-${effectivePermission}`}
+          key={`${shareToken}-${sharedCanvas.canvas.updatedAt}`}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
-          viewModeEnabled={isViewOnly}
+          viewModeEnabled
           zenModeEnabled={false}
           gridModeEnabled={false}
           initialData={initialData}
-          onChange={handleSceneChange}
           UIOptions={{
             canvasActions: {
               changeViewBackgroundColor: false,
-              clearCanvas: !isViewOnly,
+              clearCanvas: false,
               export: {
                 saveFileToDisk: true,
               },
@@ -226,10 +148,7 @@ export function SharedCanvasWorkspace({
           }}
         />
       </div>
-
-      {/* Top Floating Bar for Shared View */}
       <header className="relative z-20 flex items-center justify-between p-4 sm:p-5 w-full pointer-events-none">
-        {/* Left: Back to FlowBoard & Canvas Title */}
         <div className="pointer-events-auto flex items-center gap-2.5">
           <Button
             variant="secondary"
@@ -245,15 +164,22 @@ export function SharedCanvasWorkspace({
           </Button>
 
           <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#1e1e22]/90 border border-zinc-800/80 text-xs font-mono text-zinc-200 backdrop-blur-md max-w-[220px] truncate shadow-xs">
-            {targetCanvas.title}
+            {sharedCanvas.canvas.title}
           </span>
         </div>
       </header>
 
-      {/* Bottom Right Floating Permission Badge (Positioned immediately to the left of the help '?' icon) */}
       <div className="absolute bottom-3 sm:bottom-4 right-14 sm:right-16 z-20 pointer-events-none flex items-center">
         <div className="pointer-events-auto">
-          {isViewOnly ? (
+          {canEditLater ? (
+            <div
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-[#3b82f6] text-white text-[11px] sm:text-xs font-medium shadow-xs select-none"
+              title="Can edit link - shared edit persistence will be enabled in a later phase"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-white shrink-0" />
+              <span>Can edit</span>
+            </div>
+          ) : (
             <div
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-[#3b82f6] text-white text-[11px] sm:text-xs font-medium shadow-xs select-none"
               title="View only mode - Drawing and element modification disabled"
@@ -261,17 +187,54 @@ export function SharedCanvasWorkspace({
               <Eye className="w-3.5 h-3.5 text-white shrink-0" />
               <span>View only</span>
             </div>
-          ) : (
-            <div
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-[#3b82f6] text-white text-[11px] sm:text-xs font-medium shadow-xs select-none"
-              title="Can edit mode - Drawing and shape editing enabled"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-white shrink-0" />
-              <span>Can edit</span>
-            </div>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+interface SharedCanvasMessageProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onReturnToApp?: () => void;
+}
+
+function SharedCanvasMessage({
+  icon,
+  title,
+  description,
+  onReturnToApp,
+}: SharedCanvasMessageProps) {
+  return (
+    <div className="w-full h-screen bg-[#141416] text-zinc-100 flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center text-zinc-400 mb-4 shadow-xl">
+        {icon}
+      </div>
+      <h1 className="text-xl font-bold text-zinc-100 mb-2">{title}</h1>
+      <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
+        {description}
+      </p>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          onReturnToApp?.();
+        }}
+        className="gap-2 text-xs"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Return to FlowBoard</span>
+      </Button>
+    </div>
+  );
+}
+
+function getShareErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "The shared canvas could not be loaded.";
 }

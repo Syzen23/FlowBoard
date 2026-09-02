@@ -1,6 +1,6 @@
 import type { FlowBoardSceneData } from "@/src/features/canvas/types";
 
-export type RouteMode = "canvas" | "calendar" | "share";
+export type RouteMode = "canvas" | "calendar";
 
 export type SharePermission = "private" | "view" | "edit";
 

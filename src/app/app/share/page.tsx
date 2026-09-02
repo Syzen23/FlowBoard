@@ -2,20 +2,17 @@ import * as React from "react";
 import { SharedCanvasWorkspace } from "@/src/features/canvas/components/SharedCanvasWorkspace";
 
 interface SharePageProps {
-  canvasId: string;
-  permission?: "view" | "edit";
+  shareToken: string;
   onReturnToApp?: () => void;
 }
 
 export default function SharePage({
-  canvasId,
-  permission,
+  shareToken,
   onReturnToApp,
 }: SharePageProps) {
   return (
     <SharedCanvasWorkspace
-      canvasId={canvasId}
-      initialPermission={permission}
+      shareToken={shareToken}
       onReturnToApp={onReturnToApp}
     />
   );
