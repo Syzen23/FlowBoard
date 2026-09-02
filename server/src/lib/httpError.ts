@@ -1,6 +1,6 @@
 import type { Response } from "express";
 
-export type HttpErrorStatus = 400 | 404;
+export type HttpErrorStatus = 400 | 403 | 404;
 
 export type HttpError = {
   status: HttpErrorStatus;
@@ -9,6 +9,10 @@ export type HttpError = {
 
 export function badRequest(message: string): HttpError {
   return { status: 400, message };
+}
+
+export function forbidden(message: string): HttpError {
+  return { status: 403, message };
 }
 
 export function notFound(message: string): HttpError {
@@ -29,7 +33,7 @@ export function isHttpError(error: unknown): error is HttpError {
     error !== null &&
     "status" in error &&
     "message" in error &&
-    (error.status === 400 || error.status === 404) &&
+    (error.status === 400 || error.status === 403 || error.status === 404) &&
     typeof error.message === "string"
   );
 }
