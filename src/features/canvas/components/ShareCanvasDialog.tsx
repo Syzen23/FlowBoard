@@ -8,7 +8,11 @@ import {
   DialogDescription,
 } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
-import { shareRepository } from "@/src/features/canvas/repositories/shareRepository";
+import {
+  type BackendSharePermission,
+  type CanvasShare,
+  shareRepository,
+} from "@/src/features/canvas/repositories/shareRepository";
 
 interface ShareCanvasDialogProps {
   open: boolean;
@@ -17,67 +21,134 @@ interface ShareCanvasDialogProps {
   canvasTitle?: string;
 }
 
+type AccessMode = "private" | "anyone";
+
 export function ShareCanvasDialog({
   open,
   onOpenChange,
   canvasId = "",
   canvasTitle = "Untitled Canvas",
 }: ShareCanvasDialogProps) {
-  const [accessMode, setAccessMode] = React.useState<"private" | "anyone">("private");
-  const [publicPermission, setPublicPermission] = React.useState<"view" | "edit">("view");
+  const [accessMode, setAccessMode] = React.useState<AccessMode>("private");
+  const [publicPermission, setPublicPermission] = React.useState<BackendSharePermission>("view");
+  const [activeShare, setActiveShare] = React.useState<CanvasShare | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
 
-  // Load existing share settings on open or canvasId change
   React.useEffect(() => {
-    if (open && canvasId) {
-      const setting = shareRepository.getByCanvasId(canvasId);
-      if (setting.permission === "private") {
+    if (!open || !canvasId) return;
+
+    let isCurrentRequest = true;
+    setIsLoading(true);
+    setError(null);
+    setCopied(false);
+
+    shareRepository
+      .getByCanvasId(canvasId)
+      .then((share) => {
+        if (!isCurrentRequest) return;
+
+        setActiveShare(share);
+        setAccessMode(share ? "anyone" : "private");
+        setPublicPermission(share?.permission || "view");
+      })
+      .catch((loadError) => {
+        if (!isCurrentRequest) return;
+
+        setActiveShare(null);
         setAccessMode("private");
         setPublicPermission("view");
-      } else {
-        setAccessMode("anyone");
-        setPublicPermission(setting.permission);
-      }
-      setCopied(false);
-    }
+        setError(getShareErrorMessage(loadError));
+      })
+      .finally(() => {
+        if (isCurrentRequest) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [open, canvasId]);
 
-  const handleSelectPrivate = () => {
-    setAccessMode("private");
-    if (canvasId) {
-      shareRepository.save(canvasId, "private");
+  const shareLink = React.useMemo(() => {
+    return activeShare ? shareRepository.buildPublicUrl(activeShare.token) : "";
+  }, [activeShare]);
+
+  const saveShare = async (permission: BackendSharePermission) => {
+    if (!canvasId || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    setCopied(false);
+
+    try {
+      const savedShare = await shareRepository.save(canvasId, permission);
+      setActiveShare(savedShare);
+      setAccessMode("anyone");
+      setPublicPermission(savedShare.permission);
+    } catch (saveError) {
+      setError(getShareErrorMessage(saveError));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSelectAnyone = (permissionToSet: "view" | "edit" = publicPermission) => {
-    setAccessMode("anyone");
-    setPublicPermission(permissionToSet);
-    if (canvasId) {
-      shareRepository.save(canvasId, permissionToSet);
+  const handleSelectPrivate = async () => {
+    if (!canvasId || isSubmitting) return;
+
+    if (!activeShare) {
+      setAccessMode("private");
+      setPublicPermission("view");
+      setCopied(false);
+      setError(null);
+      return;
     }
+
+    setIsSubmitting(true);
+    setError(null);
+    setCopied(false);
+
+    try {
+      await shareRepository.revoke(canvasId);
+      setActiveShare(null);
+      setAccessMode("private");
+      setPublicPermission("view");
+    } catch (revokeError) {
+      setError(getShareErrorMessage(revokeError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelectAnyone = () => {
+    void saveShare(activeShare?.permission || publicPermission);
   };
 
   const handlePermissionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value as "view" | "edit";
-    setPublicPermission(val);
-    if (canvasId && accessMode === "anyone") {
-      shareRepository.save(canvasId, val);
+    const permission = e.target.value as BackendSharePermission;
+    setPublicPermission(permission);
+
+    if (accessMode === "anyone") {
+      void saveShare(permission);
     }
   };
 
-  const shareLink = React.useMemo(() => {
-    if (!canvasId) return "";
-    return shareRepository.buildUrl(canvasId, publicPermission);
-  }, [canvasId, publicPermission]);
-
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (accessMode === "private" || !shareLink) return;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareLink);
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Unable to copy share link.");
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
+
+  const controlsDisabled = isLoading || isSubmitting || !canvasId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,17 +168,28 @@ export function ShareCanvasDialog({
         </DialogHeader>
 
         <div className="space-y-4 my-3 text-left">
-          {/* General Access Header */}
           <div>
             <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
               General Access
             </label>
 
+            {(isLoading || isSubmitting || error) && (
+              <div
+                className={`mb-2 rounded-lg border px-3 py-2 text-[11px] ${
+                  error
+                    ? "border-red-500/20 bg-red-500/10 text-red-300"
+                    : "border-zinc-800 bg-zinc-900/60 text-zinc-400"
+                }`}
+              >
+                {error || (isLoading ? "Loading share settings..." : "Updating share settings...")}
+              </div>
+            )}
+
             <div className="space-y-2">
-              {/* Private Option */}
               <label
-                onClick={handleSelectPrivate}
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                  controlsDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"
+                } ${
                   accessMode === "private"
                     ? "bg-[#232328] border-blue-500/60 shadow-xs"
                     : "bg-[#1f1f22] border-zinc-800/80 hover:border-zinc-700"
@@ -117,8 +199,9 @@ export function ShareCanvasDialog({
                   type="radio"
                   name="general-access"
                   checked={accessMode === "private"}
-                  onChange={handleSelectPrivate}
-                  className="mt-0.5 text-blue-500 focus:ring-0 cursor-pointer"
+                  disabled={controlsDisabled}
+                  onChange={() => void handleSelectPrivate()}
+                  className="mt-0.5 text-blue-500 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
@@ -131,10 +214,10 @@ export function ShareCanvasDialog({
                 </div>
               </label>
 
-              {/* Anyone with link Option */}
               <label
-                onClick={() => handleSelectAnyone(publicPermission)}
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                  controlsDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"
+                } ${
                   accessMode === "anyone"
                     ? "bg-[#232328] border-blue-500/60 shadow-xs"
                     : "bg-[#1f1f22] border-zinc-800/80 hover:border-zinc-700"
@@ -144,8 +227,9 @@ export function ShareCanvasDialog({
                   type="radio"
                   name="general-access"
                   checked={accessMode === "anyone"}
-                  onChange={() => handleSelectAnyone(publicPermission)}
-                  className="mt-0.5 text-blue-500 focus:ring-0 cursor-pointer"
+                  disabled={controlsDisabled}
+                  onChange={handleSelectAnyone}
+                  className="mt-0.5 text-blue-500 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between gap-2">
@@ -158,9 +242,10 @@ export function ShareCanvasDialog({
                       <div className="flex items-center gap-1.5">
                         <select
                           value={publicPermission}
+                          disabled={controlsDisabled}
                           onChange={handlePermissionChange}
                           onClick={(e) => e.stopPropagation()}
-                          className="bg-[#2a2a30] text-xs text-blue-300 font-medium rounded-md px-2.5 py-1 border border-zinc-700/80 focus:outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                          className="bg-[#2a2a30] text-xs text-blue-300 font-medium rounded-md px-2.5 py-1 border border-zinc-700/80 focus:outline-none focus:border-blue-500 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value="view">Can View</option>
                           <option value="edit">Can Edit</option>
@@ -176,13 +261,12 @@ export function ShareCanvasDialog({
             </div>
           </div>
 
-          {/* Link Box */}
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-              Simulated Share Link
+              Share Link
             </label>
 
-            {accessMode === "anyone" ? (
+            {accessMode === "anyone" && activeShare ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-[#242428] border border-zinc-700/60">
                   <input
@@ -195,8 +279,9 @@ export function ShareCanvasDialog({
                     type="button"
                     variant="blue"
                     size="sm"
-                    onClick={handleCopy}
-                    className="shrink-0 text-xs h-7 px-3 gap-1.5 font-medium cursor-pointer"
+                    onClick={() => void handleCopy()}
+                    disabled={controlsDisabled}
+                    className="shrink-0 text-xs h-7 px-3 gap-1.5 font-medium cursor-pointer disabled:cursor-not-allowed"
                   >
                     {copied ? (
                       <>
@@ -261,4 +346,12 @@ export function ShareCanvasDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function getShareErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unable to update share settings.";
 }

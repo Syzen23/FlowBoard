@@ -3,7 +3,7 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { Eye, Edit3, Lock, AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
-import { shareRepository } from "@/src/features/canvas/repositories/shareRepository";
+import { getCanvasShareSetting } from "@/src/features/canvas/utils/shareStorage";
 import {
   loadLegacyShareCanvasesFromStorage,
   saveLegacyShareCanvasesToStorage,
@@ -40,7 +40,7 @@ export function SharedCanvasWorkspace({
   }, [canvasId]);
 
   const shareSetting = React.useMemo(() => {
-    return shareRepository.getByCanvasId(canvasId);
+    return getCanvasShareSetting(canvasId);
   }, [canvasId]);
 
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);

@@ -1,28 +1,45 @@
-import type { CanvasShareSetting, SharePermission } from "@/src/types";
-import {
-  SHARE_SETTINGS_UPDATED_EVENT,
-  buildShareUrl,
-  getCanvasShareSetting,
-  loadAllShareSettings,
-  saveCanvasShareSetting,
-} from "@/src/features/canvas/utils/shareStorage";
+import { ApiError, apiClient } from "@/src/lib/apiClient";
 
-export { SHARE_SETTINGS_UPDATED_EVENT };
+export type BackendSharePermission = "view" | "edit";
+
+export interface CanvasShare {
+  id: string;
+  canvasId: string;
+  token: string;
+  permission: BackendSharePermission;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export const shareRepository = {
-  getAll(): Record<string, CanvasShareSetting> {
-    return loadAllShareSettings();
+  async getByCanvasId(canvasId: string): Promise<CanvasShare | null> {
+    try {
+      return await apiClient.get<CanvasShare>(`/canvases/${canvasId}/share`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return null;
+      }
+
+      throw error;
+    }
   },
 
-  getByCanvasId(canvasId: string): CanvasShareSetting {
-    return getCanvasShareSetting(canvasId);
+  save(canvasId: string, permission: BackendSharePermission): Promise<CanvasShare> {
+    return apiClient.put<CanvasShare, { permission: BackendSharePermission }>(
+      `/canvases/${canvasId}/share`,
+      { permission }
+    );
   },
 
-  save(canvasId: string, permission: SharePermission): CanvasShareSetting {
-    return saveCanvasShareSetting(canvasId, permission);
+  revoke(canvasId: string): Promise<void> {
+    return apiClient.delete(`/canvases/${canvasId}/share`);
   },
 
-  buildUrl(canvasId: string, permission: "view" | "edit"): string {
-    return buildShareUrl(canvasId, permission);
+  buildPublicUrl(token: string): string {
+    if (typeof window === "undefined") {
+      return `https://flowboard.app/app/share/${token}`;
+    }
+
+    return `${window.location.origin}/app/share/${token}`;
   },
 };
