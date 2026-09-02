@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "realtime": {
+      "access": {
+        "$canvasId": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": false,
+            ".validate": "newData.hasChildren(['permission', 'source', 'grantedAt']) && (newData.child('permission').val() === 'view' || newData.child('permission').val() === 'edit') && (newData.child('source').val() === 'owner' || newData.child('source').val() === 'share') && newData.child('grantedAt').isNumber()"
+          }
+        }
+      },
+      "canvases": {
+        "$canvasId": {
+          ".read": "auth != null && root.child('realtime/access/' + $canvasId + '/' + auth.uid).exists()",
+          "meta": {
+            ".write": false,
+            ".validate": "newData.hasChildren(['status', 'initializedFromRevision']) && (newData.child('status').val() === 'initializing' || newData.child('status').val() === 'ready') && newData.child('initializedFromRevision').isNumber()"
+          },
+          "elements": {
+            ".write": "auth != null && root.child('realtime/access/' + $canvasId + '/' + auth.uid + '/permission').val() === 'edit'"
+          },
+          "files": {
+            ".write": "auth != null && root.child('realtime/access/' + $canvasId + '/' + auth.uid + '/permission').val() === 'edit'"
+          },
+          "$other": {
+            ".read": false,
+            ".write": false
+          }
+        }
+      },
+      "$other": {
+        ".read": false,
+        ".write": false
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}
