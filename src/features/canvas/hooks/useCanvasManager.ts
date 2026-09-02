@@ -60,15 +60,38 @@ export function useCanvasManager(initialSelectedId?: string) {
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const isProgrammaticUpdateRef = React.useRef(false);
   const saveRequestIdRef = React.useRef(0);
+  const sessionIdRef = React.useRef(0);
+  const currentUserIdRef = React.useRef<string | undefined>(currentUserId);
+
+  const resetRuntimeState = React.useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    pendingScenesRef.current.clear();
+    saveRequestIdRef.current += 1;
+    activeCanvasIdRef.current = "";
+    canvasesRef.current = [];
+    isProgrammaticUpdateRef.current = false;
+    setCanvases([]);
+    setActiveCanvasId("");
+    setSaveStatus("saved");
+  }, []);
 
   React.useEffect(() => {
     if (authLoading) {
       return;
     }
 
+    const userChanged = currentUserIdRef.current !== currentUserId;
+    if (userChanged) {
+      currentUserIdRef.current = currentUserId;
+      sessionIdRef.current += 1;
+      resetRuntimeState();
+    }
+
     if (!currentUserId) {
-      setCanvases([]);
-      setActiveCanvasId("");
       setIsInitialized(false);
       setIsLoading(false);
       setError(null);
@@ -76,15 +99,17 @@ export function useCanvasManager(initialSelectedId?: string) {
     }
 
     let cancelled = false;
+    const sessionId = sessionIdRef.current;
 
     async function initializeCanvases() {
+      resetRuntimeState();
       setIsLoading(true);
       setIsInitialized(false);
       setError(null);
 
       try {
         const loadedCanvases = await getInitialCanvasesForUser(currentUserId);
-        if (cancelled) return;
+        if (cancelled || sessionIdRef.current !== sessionId) return;
 
         const validIds = loadedCanvases.map((canvas) => canvas.id);
         const nextActiveCanvasId =
@@ -100,11 +125,11 @@ export function useCanvasManager(initialSelectedId?: string) {
         setSaveStatus("saved");
         setIsInitialized(true);
       } catch (initializationError) {
-        if (cancelled) return;
+        if (cancelled || sessionIdRef.current !== sessionId) return;
         setError(getErrorMessage(initializationError));
         setIsInitialized(false);
       } finally {
-        if (!cancelled) {
+        if (!cancelled && sessionIdRef.current === sessionId) {
           setIsLoading(false);
         }
       }
@@ -115,7 +140,7 @@ export function useCanvasManager(initialSelectedId?: string) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, currentUserId, initialSelectedId]);
+  }, [authLoading, currentUserId, initialSelectedId, resetRuntimeState]);
 
   React.useEffect(() => {
     if (activeCanvasId) {
@@ -124,6 +149,8 @@ export function useCanvasManager(initialSelectedId?: string) {
   }, [activeCanvasId]);
 
   const flushCurrentScene = React.useCallback(async (): Promise<boolean> => {
+    const sessionId = sessionIdRef.current;
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -170,7 +197,7 @@ export function useCanvasManager(initialSelectedId?: string) {
       try {
         const savedCanvas = await canvasRepository.update(currentId, { sceneData });
 
-        if (saveRequestIdRef.current !== saveRequestId) {
+        if (sessionIdRef.current !== sessionId || saveRequestIdRef.current !== saveRequestId) {
           continue;
         }
 
@@ -188,6 +215,10 @@ export function useCanvasManager(initialSelectedId?: string) {
           return updatedCanvases;
         });
       } catch (saveError) {
+        if (sessionIdRef.current !== sessionId) {
+          return false;
+        }
+
         if (!pendingScenesRef.current.has(currentId)) {
           pendingScenesRef.current.set(currentId, pendingScene);
         }
@@ -244,9 +275,10 @@ export function useCanvasManager(initialSelectedId?: string) {
   const switchCanvas = React.useCallback(
     async (targetCanvasId: string, excalidrawAPI?: FlowBoardExcalidrawAPI | null) => {
       if (!isInitialized || targetCanvasId === activeCanvasIdRef.current) return;
+      const sessionId = sessionIdRef.current;
 
       const flushed = await flushCurrentScene();
-      if (!flushed) return;
+      if (!flushed || sessionIdRef.current !== sessionId) return;
 
       const target = canvasesRef.current.find((canvas) => canvas.id === targetCanvasId);
       if (!target) return;
@@ -272,13 +304,15 @@ export function useCanvasManager(initialSelectedId?: string) {
       if (!isInitialized || canvasesRef.current.length >= MAX_CANVASES) {
         return null;
       }
+      const sessionId = sessionIdRef.current;
 
       const flushed = await flushCurrentScene();
-      if (!flushed) return null;
+      if (!flushed || sessionIdRef.current !== sessionId) return null;
 
       try {
         setSaveStatus("saving");
         const newCanvas = await canvasRepository.create("Untitled Canvas");
+        if (sessionIdRef.current !== sessionId) return null;
         const updatedCanvases = [...canvasesRef.current, newCanvas];
 
         canvasesRef.current = updatedCanvases;
@@ -300,6 +334,7 @@ export function useCanvasManager(initialSelectedId?: string) {
         setSaveStatus("saved");
         return newCanvas;
       } catch (createError) {
+        if (sessionIdRef.current !== sessionId) return null;
         setError(getErrorMessage(createError));
         setSaveStatus("error");
         return null;
@@ -310,10 +345,12 @@ export function useCanvasManager(initialSelectedId?: string) {
 
   const renameCanvas = React.useCallback(async (id: string, newTitle: string) => {
     const trimmed = newTitle.trim() || "Untitled Canvas";
+    const sessionId = sessionIdRef.current;
 
     try {
       setSaveStatus("saving");
       const savedCanvas = await canvasRepository.update(id, { title: trimmed });
+      if (sessionIdRef.current !== sessionId) return;
 
       setCanvases((currentCanvases) => {
         const updatedCanvases = currentCanvases.map((canvas) =>
@@ -331,6 +368,7 @@ export function useCanvasManager(initialSelectedId?: string) {
 
       setSaveStatus(pendingScenesRef.current.size > 0 ? "saving" : "saved");
     } catch (renameError) {
+      if (sessionIdRef.current !== sessionId) return;
       setError(getErrorMessage(renameError));
       setSaveStatus("error");
     }
@@ -341,13 +379,15 @@ export function useCanvasManager(initialSelectedId?: string) {
       if (!isInitialized || canvasesRef.current.length <= MIN_CANVASES) {
         return;
       }
+      const sessionId = sessionIdRef.current;
 
       const flushed = await flushCurrentScene();
-      if (!flushed) return;
+      if (!flushed || sessionIdRef.current !== sessionId) return;
 
       try {
         setSaveStatus("saving");
         await canvasRepository.delete(id);
+        if (sessionIdRef.current !== sessionId) return;
 
         const currentId = activeCanvasIdRef.current;
         const updatedCanvases = canvasesRef.current.filter((canvas) => canvas.id !== id);

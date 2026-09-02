@@ -138,7 +138,7 @@ export function CanvasWorkspace({
             size="icon"
             onClick={() => setMenuOpen(true)}
             aria-label="Open Canvases Menu"
-            className="w-9 h-9 rounded-lg bg-[#1e1e22]/90 hover:bg-[#28282e] border-zinc-800 text-zinc-300 shadow-md"
+            className="w-9 h-9 rounded-lg bg-[#1e1e22]/90 hover:bg-[#28282e] border-zinc-800 text-zinc-300 shadow-none ring-0 outline-none focus-visible:ring-0"
           >
             <Menu className="w-4 h-4" />
           </Button>
@@ -203,7 +203,7 @@ export function CanvasWorkspace({
             variant="blue"
             size="sm"
             onClick={() => setShareOpen(true)}
-            className="text-xs h-8 px-3.5 rounded-lg shadow-md gap-1.5 font-medium"
+            className="text-xs h-8 px-3.5 rounded-lg shadow-none gap-1.5 font-medium ring-0 outline-none focus-visible:ring-0"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>Share</span>

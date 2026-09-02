@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, Settings, Check, Trash2, Edit2, Layers, AlertCircle, X } from "lucide-react";
+import { Plus, Check, Trash2, Edit2, Layers, AlertCircle, X, LogOut } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
 import { CanvasWorkspace } from "@/src/types";
 import { MAX_CANVASES, MIN_CANVASES } from "@/src/features/canvas/repositories/canvasRepository";
+import { useAuth } from "@/src/features/auth/AuthContext";
 
 interface CanvasMenuProps {
   open: boolean;
@@ -26,9 +27,12 @@ export function CanvasMenu({
   onRenameCanvas,
   onDeleteCanvas,
 }: CanvasMenuProps) {
+  const { currentUser, signOut } = useAuth();
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
+  const [signOutError, setSignOutError] = React.useState<string | null>(null);
 
   const maxReached = canvases.length >= MAX_CANVASES;
   const isOnlyOneCanvas = canvases.length <= MIN_CANVASES;
@@ -63,6 +67,22 @@ export function CanvasMenu({
     if (deleteConfirmId) {
       onDeleteCanvas(deleteConfirmId);
       setDeleteConfirmId(null);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+
+    setIsSigningOut(true);
+    setSignOutError(null);
+
+    try {
+      await signOut();
+      onOpenChange(false);
+    } catch (error) {
+      setSignOutError(error instanceof Error ? error.message : "Unable to sign out. Please try again.");
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -207,15 +227,38 @@ export function CanvasMenu({
               </p>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-xs text-zinc-400 hover:text-zinc-200"
-              onClick={() => onOpenChange(false)}
-            >
-              <Settings className="w-3.5 h-3.5 mr-2" />
-              Settings
-            </Button>
+            {currentUser && (
+              <>
+                <div className="h-px bg-zinc-800/80 my-3" />
+
+                <div className="space-y-2">
+                  <p
+                    className="px-1 text-[11px] text-zinc-500 truncate"
+                    title={currentUser.email || currentUser.uid}
+                  >
+                    {currentUser.email || currentUser.uid}
+                  </p>
+
+                  {signOutError && (
+                    <p className="px-1 text-[11px] text-red-400 leading-snug">
+                      {signOutError}
+                    </p>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSigningOut}
+                    className="w-full justify-start text-xs text-zinc-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="w-3.5 h-3.5 mr-2" />
+                    {isSigningOut ? "Signing out..." : "Sign out"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
