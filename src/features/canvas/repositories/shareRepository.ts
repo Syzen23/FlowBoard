@@ -49,16 +49,13 @@ export const shareRepository = {
   },
 
   getPublicShare(token: string): Promise<PublicShare> {
-    return apiClient.get<PublicShare>(`/shares/${token}`, {
-      authenticated: false,
-    });
+    return apiClient.get<PublicShare>(`/shares/${token}`);
   },
 
   updatePublicCanvas(token: string, sceneData: FlowBoardSceneData): Promise<PublicShare> {
     return apiClient.patch<PublicShare, { sceneData: FlowBoardSceneData }>(
       `/shares/${token}/canvas`,
-      { sceneData },
-      { authenticated: false }
+      { sceneData }
     );
   },
 

@@ -16,5 +16,6 @@ ownerShareRouter.get("/:canvasId/share", getCanvasShareController);
 ownerShareRouter.put("/:canvasId/share", upsertCanvasShareController);
 ownerShareRouter.delete("/:canvasId/share", revokeCanvasShareController);
 
+publicShareRouter.use(requireFirebaseAuth);
 publicShareRouter.get("/:token", getPublicShareController);
 publicShareRouter.patch("/:token/canvas", updatePublicSharedCanvasController);

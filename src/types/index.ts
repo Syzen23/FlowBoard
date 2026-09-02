@@ -2,14 +2,6 @@ import type { FlowBoardSceneData } from "@/src/features/canvas/types";
 
 export type RouteMode = "canvas" | "calendar";
 
-export type SharePermission = "private" | "view" | "edit";
-
-export interface CanvasShareSetting {
-  canvasId: string;
-  permission: SharePermission;
-  updatedAt: string;
-}
-
 export type TaskStatus = "todo" | "in_progress" | "done";
 
 export type CanvasWorkspace = {

@@ -1,15 +1,8 @@
-import { useLocation } from "react-router-dom";
 import { LoginScreen } from "@/src/features/auth/LoginScreen";
 import { useAuth } from "@/src/features/auth/AuthContext";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
-  const location = useLocation();
-  const isShareRoute = location.pathname.startsWith("/app/share/");
-
-  if (isShareRoute) {
-    return <>{children}</>;
-  }
 
   if (loading) {
     return (
