@@ -31,6 +31,8 @@ export function ConvertTaskDialog({
   const [time, setTime] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Initialize form whenever dialog opens
   React.useEffect(() => {
@@ -42,29 +44,40 @@ export function ConvertTaskDialog({
       setTime("");
       setDescription("");
       setToastMessage(null);
+      setErrorMessage(null);
+      setIsSubmitting(false);
     }
   }, [open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !deadline) return;
+    if (!title.trim() || !deadline || isSubmitting) return;
 
-    const newTask = taskRepository.create({
-      title: title.trim(),
-      dueDate: deadline,
-      dueTime: time.trim() ? time.trim() : undefined,
-      description: description.trim() ? description.trim() : undefined,
-      status: "todo",
-      canvasId: currentCanvasId || null,
-    });
+    setIsSubmitting(true);
+    setErrorMessage(null);
 
-    setToastMessage("Task added to Calendar.");
+    try {
+      const newTask = await taskRepository.create({
+        title: title.trim(),
+        dueDate: deadline,
+        dueTime: time.trim() ? time.trim() : undefined,
+        description: description.trim() ? description.trim() : undefined,
+        status: "todo",
+        canvasId: currentCanvasId || null,
+      });
 
-    setTimeout(() => {
-      setToastMessage(null);
-      onOpenChange(false);
-      if (onConverted) onConverted(newTask);
-    }, 850);
+      setToastMessage("Task added to Calendar.");
+
+      setTimeout(() => {
+        setToastMessage(null);
+        onOpenChange(false);
+        if (onConverted) onConverted(newTask);
+      }, 850);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to create task.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -90,6 +103,12 @@ export function ConvertTaskDialog({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 my-2 text-left">
+            {errorMessage && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
+                {errorMessage}
+              </div>
+            )}
+
             {/* Read-only Source Canvas Context */}
             <div className="bg-[#242428]/80 border border-zinc-800 rounded-lg px-3 py-2 text-xs flex items-center justify-between text-zinc-300">
               <span className="text-zinc-400 flex items-center gap-1.5">
@@ -174,9 +193,10 @@ export function ConvertTaskDialog({
                 type="submit"
                 variant="orange"
                 size="sm"
+                disabled={isSubmitting}
                 className="text-xs px-4 font-medium"
               >
-                Add Task
+                {isSubmitting ? "Saving..." : "Add Task"}
               </Button>
             </div>
           </form>

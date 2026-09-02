@@ -43,6 +43,7 @@ export function CalendarWorkspace({
   const {
     canvases,
     activeCanvasId,
+    isInitialized: canvasesInitialized,
     createCanvas,
     renameCanvas,
     deleteCanvas,
@@ -51,14 +52,24 @@ export function CalendarWorkspace({
   // Task manager with repository-backed persistence
   const {
     tasks,
+    isLoading: tasksLoading,
+    error: taskError,
     createTask,
     updateTask,
     deleteTask,
     setTaskStatus,
     toggleTaskStatus,
+    reconcileDeletedCanvasLinks,
     getTasksForDate,
     hasTasksOnDate,
   } = useTaskManager();
+
+  const canvasIds = React.useMemo(() => canvases.map((canvas) => canvas.id), [canvases]);
+
+  React.useEffect(() => {
+    if (!canvasesInitialized) return;
+    void reconcileDeletedCanvasLinks(canvasIds);
+  }, [canvasIds, canvasesInitialized, reconcileDeletedCanvasLinks]);
 
   // Initialize date state with today's date (defaults to August 2026 in environment / prototype)
   const [currentYear, setCurrentYear] = React.useState(() => {
@@ -131,7 +142,7 @@ export function CalendarWorkspace({
   }, [selectedTask, tasks]);
 
   // Task creation or edit save handler
-  const handleSaveTask = (taskData: {
+  const handleSaveTask = async (taskData: {
     title: string;
     dueDate: string;
     dueTime?: string;
@@ -140,7 +151,7 @@ export function CalendarWorkspace({
     canvasId?: string | null;
   }) => {
     if (taskToEdit) {
-      updateTask(taskToEdit.id, {
+      const updated = await updateTask(taskToEdit.id, {
         title: taskData.title,
         dueDate: taskData.dueDate,
         dueTime: taskData.dueTime,
@@ -148,9 +159,13 @@ export function CalendarWorkspace({
         status: taskData.status,
         canvasId: taskData.canvasId !== undefined ? taskData.canvasId : null,
       });
-      setTaskToEdit(null);
+      if (updated) {
+        setTaskToEdit(null);
+        return;
+      }
+      throw new Error("Failed to update task.");
     } else {
-      createTask({
+      const created = await createTask({
         title: taskData.title,
         dueDate: taskData.dueDate,
         dueTime: taskData.dueTime,
@@ -158,6 +173,9 @@ export function CalendarWorkspace({
         status: taskData.status,
         canvasId: taskData.canvasId !== undefined ? taskData.canvasId : null,
       });
+      if (!created) {
+        throw new Error("Failed to create task.");
+      }
     }
   };
 
@@ -175,13 +193,15 @@ export function CalendarWorkspace({
   };
 
   // Execute task delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (taskToDelete) {
-      deleteTask(taskToDelete.id);
-      if (selectedTask?.id === taskToDelete.id) {
-        setSelectedTask(null);
+      const deleted = await deleteTask(taskToDelete.id);
+      if (deleted) {
+        if (selectedTask?.id === taskToDelete.id) {
+          setSelectedTask(null);
+        }
+        setTaskToDelete(null);
       }
-      setTaskToDelete(null);
     }
   };
 
@@ -341,9 +361,15 @@ export function CalendarWorkspace({
 
           {/* Right Panel: Day Task Context Panel (5 cols) */}
           <div className="md:col-span-5 h-full min-h-[360px]">
+            {taskError && (
+              <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
+                {taskError}
+              </div>
+            )}
             <DayTaskPanel
               selectedDate={selectedDateStr}
               tasks={tasksForSelectedDay}
+              isLoading={tasksLoading}
               onNewTask={() => {
                 setTaskToEdit(null);
                 setTaskFormOpen(true);

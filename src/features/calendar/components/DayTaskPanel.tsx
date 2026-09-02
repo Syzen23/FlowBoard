@@ -17,6 +17,7 @@ interface DayTaskPanelProps {
   tasks: Task[];
   onNewTask: () => void;
   onSelectTask: (task: Task) => void;
+  isLoading?: boolean;
   onToggleTaskStatus?: (taskId: string) => void;
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (task: Task) => void;
@@ -27,6 +28,7 @@ export function DayTaskPanel({
   tasks,
   onNewTask,
   onSelectTask,
+  isLoading = false,
   onToggleTaskStatus,
   onEditTask,
   onDeleteTask,
@@ -61,7 +63,11 @@ export function DayTaskPanel({
 
       {/* Task List */}
       <div className="flex-1 overflow-y-auto py-3 space-y-2">
-        {tasks.length === 0 ? (
+        {isLoading ? (
+          <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-center p-6 text-zinc-500">
+            <p className="text-xs font-medium text-zinc-400">Loading tasks...</p>
+          </div>
+        ) : tasks.length === 0 ? (
           <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-center p-6 text-zinc-500">
             <p className="text-xs font-medium text-zinc-400">No tasks scheduled.</p>
             <p className="text-[11px] text-zinc-600 mt-1">

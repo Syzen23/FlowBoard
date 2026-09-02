@@ -23,7 +23,7 @@ interface TaskFormProps {
     description?: string;
     status: TaskStatus;
     canvasId?: string | null;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export function TaskForm({
@@ -42,6 +42,8 @@ export function TaskForm({
   const [description, setDescription] = React.useState("");
   const [status, setStatus] = React.useState<TaskStatus>("todo");
   const [selectedCanvasId, setSelectedCanvasId] = React.useState<string>("none");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   // Sync form state whenever dialog opens or taskToEdit / initialDate changes
   React.useEffect(() => {
@@ -61,20 +63,29 @@ export function TaskForm({
         setStatus("todo");
         setSelectedCanvasId("none"); // Default to None for new Calendar tasks
       }
+      setIsSubmitting(false);
+      setErrorMessage(null);
     }
   }, [open, taskToEdit, initialDate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !dueDate) return;
+    if (!title.trim() || !dueDate || isSubmitting) return;
 
     const finalCanvasId =
       selectedCanvasId === "none" || !selectedCanvasId
         ? null
         : selectedCanvasId;
 
-    if (onSave) {
-      onSave({
+    if (!onSave) {
+      onOpenChange(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    try {
+      await onSave({
         title: title.trim(),
         dueDate,
         dueTime: dueTime.trim() ? dueTime.trim() : undefined,
@@ -82,8 +93,12 @@ export function TaskForm({
         status,
         canvasId: finalCanvasId,
       });
+      onOpenChange(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to save task.");
+    } finally {
+      setIsSubmitting(false);
     }
-    onOpenChange(false);
   };
 
   return (
@@ -110,6 +125,12 @@ export function TaskForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 my-2 text-left">
+          {errorMessage && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
+              {errorMessage}
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label className="block text-xs font-medium text-zinc-300 mb-1.5">
@@ -247,9 +268,10 @@ export function TaskForm({
               type="submit"
               variant="orange"
               size="sm"
+              disabled={isSubmitting}
               className="text-xs px-4"
             >
-              {isEditing ? "Save Changes" : "Create Task"}
+              {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Create Task"}
             </Button>
           </div>
         </form>

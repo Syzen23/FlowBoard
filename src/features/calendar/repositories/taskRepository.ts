@@ -1,13 +1,5 @@
 import type { Task, TaskStatus } from "@/src/types";
-import {
-  TASKS_UPDATED_EVENT,
-  addTaskToStorage,
-  loadTasksFromStorage,
-  saveTasksToStorage,
-  unlinkTasksForCanvas,
-} from "@/src/features/calendar/utils/taskStorage";
-
-export { TASKS_UPDATED_EVENT };
+import { apiClient } from "@/src/lib/apiClient";
 
 export interface CreateTaskData {
   title: string;
@@ -21,52 +13,34 @@ export interface CreateTaskData {
 export interface UpdateTaskData {
   title?: string;
   dueDate?: string;
-  dueTime?: string;
-  description?: string;
+  dueTime?: string | null;
+  description?: string | null;
   status?: TaskStatus;
   canvasId?: string | null;
 }
 
 export const taskRepository = {
-  getAll(): Task[] {
-    return loadTasksFromStorage();
+  getAll(): Promise<Task[]> {
+    return apiClient.get<Task[]>("/tasks");
   },
 
-  save(tasks: Task[]): void {
-    saveTasksToStorage(tasks);
+  getById(id: string): Promise<Task> {
+    return apiClient.get<Task>(`/tasks/${id}`);
   },
 
-  create(taskData: CreateTaskData): Task {
-    return addTaskToStorage(taskData);
-  },
-
-  update(taskId: string, updates: UpdateTaskData): Task[] {
-    const updatedTasks = loadTasksFromStorage().map((task) => {
-      if (task.id !== taskId) return task;
-      return {
-        ...task,
-        ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
-        ...(updates.dueDate !== undefined ? { dueDate: updates.dueDate } : {}),
-        ...(updates.dueTime !== undefined ? { dueTime: updates.dueTime || undefined } : {}),
-        ...(updates.description !== undefined
-          ? { description: updates.description.trim() || undefined }
-          : {}),
-        ...(updates.status !== undefined ? { status: updates.status } : {}),
-        ...(updates.canvasId !== undefined ? { canvasId: updates.canvasId } : {}),
-        updatedAt: new Date().toISOString(),
-      };
+  create(taskData: CreateTaskData): Promise<Task> {
+    return apiClient.post<Task, CreateTaskData>("/tasks", {
+      ...taskData,
+      status: taskData.status || "todo",
+      canvasId: taskData.canvasId !== undefined ? taskData.canvasId : null,
     });
-    saveTasksToStorage(updatedTasks);
-    return updatedTasks;
   },
 
-  delete(taskId: string): Task[] {
-    const updatedTasks = loadTasksFromStorage().filter((task) => task.id !== taskId);
-    saveTasksToStorage(updatedTasks);
-    return updatedTasks;
+  update(taskId: string, updates: UpdateTaskData): Promise<Task> {
+    return apiClient.patch<Task, UpdateTaskData>(`/tasks/${taskId}`, updates);
   },
 
-  unlinkCanvas(canvasId: string): void {
-    unlinkTasksForCanvas(canvasId);
+  delete(taskId: string): Promise<void> {
+    return apiClient.delete(`/tasks/${taskId}`);
   },
 };
