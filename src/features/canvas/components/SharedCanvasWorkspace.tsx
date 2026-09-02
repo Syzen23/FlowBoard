@@ -10,17 +10,25 @@ import {
 } from "@/src/features/canvas/repositories/shareRepository";
 import {
   applyAppStateToExcalidraw,
+  createFlowBoardAppState,
   createScenePayload,
+  normalizeSceneForStorage,
 } from "@/src/features/canvas/adapters/canvasSceneAdapter";
 import type {
+  FlowBoardCanvasAppState,
+  FlowBoardCanvasElement,
+  FlowBoardCanvasFiles,
   FlowBoardExcalidrawAPI,
   FlowBoardInitialScene,
+  FlowBoardSceneData,
 } from "@/src/features/canvas/types";
 
 interface SharedCanvasWorkspaceProps {
   shareToken: string;
   onReturnToApp?: () => void;
 }
+
+type SharedSaveStatus = "saved" | "saving" | "error";
 
 export function SharedCanvasWorkspace({
   shareToken,
@@ -30,6 +38,17 @@ export function SharedCanvasWorkspace({
   const [status, setStatus] = React.useState<"loading" | "success" | "not-found" | "error">("loading");
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
+  const [saveStatus, setSaveStatus] = React.useState<SharedSaveStatus>("saved");
+
+  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pendingSceneRef = React.useRef<FlowBoardSceneData | null>(null);
+  const isSavingRef = React.useRef(false);
+  const isProgrammaticUpdateRef = React.useRef(false);
+  const saveRequestIdRef = React.useRef(0);
+  const permissionRef = React.useRef<PublicShare["permission"] | null>(null);
+  permissionRef.current = sharedCanvas?.permission ?? null;
+
+  const isEditable = sharedCanvas?.permission === "edit";
 
   React.useEffect(() => {
     if (!shareToken) {
@@ -41,14 +60,27 @@ export function SharedCanvasWorkspace({
     let isCurrentRequest = true;
     setStatus("loading");
     setErrorMessage(null);
+    setSaveStatus("saved");
+    pendingSceneRef.current = null;
+    saveRequestIdRef.current += 1;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
 
     shareRepository
       .getPublicShare(shareToken)
       .then((share) => {
         if (!isCurrentRequest) return;
 
+        isProgrammaticUpdateRef.current = true;
         setSharedCanvas(share);
         setStatus("success");
+
+        window.setTimeout(() => {
+          isProgrammaticUpdateRef.current = false;
+        }, 150);
       })
       .catch((error) => {
         if (!isCurrentRequest) return;
@@ -65,6 +97,10 @@ export function SharedCanvasWorkspace({
 
     return () => {
       isCurrentRequest = false;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [shareToken]);
 
@@ -72,23 +108,154 @@ export function SharedCanvasWorkspace({
     if (!sharedCanvas) return null;
 
     return createScenePayload(sharedCanvas.canvas.sceneData, {
-      viewModeEnabled: true,
+      viewModeEnabled: !isEditable,
     }) as FlowBoardInitialScene;
-  }, [sharedCanvas]);
+  }, [isEditable, sharedCanvas]);
 
-  const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
-    if (!excalidrawAPI) return;
+  const applyDarkCanvasAppearance = React.useCallback(
+    (appState?: unknown) => {
+      if (!excalidrawAPI) return;
 
-    applyAppStateToExcalidraw(excalidrawAPI, appState, {
-      viewModeEnabled: true,
-    });
-  }, [excalidrawAPI]);
+      isProgrammaticUpdateRef.current = true;
+      applyAppStateToExcalidraw(excalidrawAPI, appState, {
+        viewModeEnabled: !isEditable,
+      });
+
+      window.setTimeout(() => {
+        isProgrammaticUpdateRef.current = false;
+      }, 150);
+    },
+    [excalidrawAPI, isEditable]
+  );
 
   React.useEffect(() => {
     if (!excalidrawAPI || !sharedCanvas) return;
 
     applyDarkCanvasAppearance(sharedCanvas.canvas.sceneData?.appState);
   }, [applyDarkCanvasAppearance, excalidrawAPI, sharedCanvas]);
+
+  const revalidateShareAccess = React.useCallback(async () => {
+    try {
+      const share = await shareRepository.getPublicShare(shareToken);
+      isProgrammaticUpdateRef.current = true;
+      setSharedCanvas(share);
+      setStatus("success");
+      setErrorMessage(null);
+      setSaveStatus("saved");
+
+      window.setTimeout(() => {
+        isProgrammaticUpdateRef.current = false;
+      }, 150);
+    } catch (error) {
+      setSharedCanvas(null);
+      if (error instanceof ApiError && error.status === 404) {
+        setStatus("not-found");
+        return;
+      }
+
+      setErrorMessage(getShareErrorMessage(error));
+      setStatus("error");
+    }
+  }, [shareToken]);
+
+  const flushPendingScene = React.useCallback(async (): Promise<void> => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (isSavingRef.current || permissionRef.current !== "edit") {
+      return;
+    }
+
+    isSavingRef.current = true;
+
+    try {
+      while (pendingSceneRef.current && permissionRef.current === "edit") {
+        const sceneData = pendingSceneRef.current;
+        pendingSceneRef.current = null;
+        const saveRequestId = saveRequestIdRef.current + 1;
+        saveRequestIdRef.current = saveRequestId;
+        setSaveStatus("saving");
+
+        try {
+          await shareRepository.updatePublicCanvas(shareToken, sceneData);
+
+          if (saveRequestIdRef.current === saveRequestId) {
+            setSaveStatus(pendingSceneRef.current ? "saving" : "saved");
+          }
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 403) {
+            pendingSceneRef.current = null;
+            setSaveStatus("error");
+            await revalidateShareAccess();
+            return;
+          }
+
+          if (error instanceof ApiError && error.status === 404) {
+            pendingSceneRef.current = null;
+            setSaveStatus("error");
+            setSharedCanvas(null);
+            setStatus("not-found");
+            return;
+          }
+
+          if (!pendingSceneRef.current) {
+            pendingSceneRef.current = sceneData;
+          }
+
+          setErrorMessage(getShareErrorMessage(error));
+          setSaveStatus("error");
+          return;
+        }
+      }
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [revalidateShareAccess, shareToken]);
+
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      saveRequestIdRef.current += 1;
+      pendingSceneRef.current = null;
+      isSavingRef.current = false;
+    };
+  }, []);
+
+  const handleSharedSceneChange = React.useCallback(
+    (
+      elements: readonly FlowBoardCanvasElement[],
+      appState: FlowBoardCanvasAppState,
+      files: FlowBoardCanvasFiles
+    ) => {
+      if (!isEditable || isProgrammaticUpdateRef.current) {
+        return;
+      }
+
+      const flowBoardAppState = createFlowBoardAppState(appState, {
+        viewModeEnabled: false,
+      });
+
+      pendingSceneRef.current = normalizeSceneForStorage(
+        elements,
+        flowBoardAppState,
+        files
+      );
+      setSaveStatus("saving");
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      debounceTimerRef.current = setTimeout(() => {
+        void flushPendingScene();
+      }, 700);
+    },
+    [flushPendingScene, isEditable]
+  );
 
   if (status === "loading") {
     return (
@@ -121,27 +288,28 @@ export function SharedCanvasWorkspace({
     );
   }
 
-  const canEditLater = sharedCanvas.permission === "edit";
+  const canEdit = sharedCanvas.permission === "edit";
 
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
-      <div className="absolute inset-0 z-0 flowboard-excalidraw">
+      <div className={`absolute inset-0 z-0 flowboard-excalidraw ${canEdit ? "" : "pointer-events-none"}`}>
         <Excalidraw
           key={`${shareToken}-${sharedCanvas.canvas.updatedAt}`}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme="dark"
-          viewModeEnabled
+          viewModeEnabled={!canEdit}
           zenModeEnabled={false}
           gridModeEnabled={false}
           initialData={initialData}
+          onChange={handleSharedSceneChange}
           UIOptions={{
             canvasActions: {
               changeViewBackgroundColor: false,
-              clearCanvas: false,
+              clearCanvas: canEdit,
               export: {
                 saveFileToDisk: true,
               },
-              loadScene: false,
+              loadScene: canEdit,
               saveAsImage: true,
               toggleTheme: false,
             },
@@ -171,13 +339,25 @@ export function SharedCanvasWorkspace({
 
       <div className="absolute bottom-3 sm:bottom-4 right-14 sm:right-16 z-20 pointer-events-none flex items-center">
         <div className="pointer-events-auto">
-          {canEditLater ? (
+          {canEdit ? (
             <div
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-[#3b82f6] text-white text-[11px] sm:text-xs font-medium shadow-xs select-none"
-              title="Can edit link - shared edit persistence will be enabled in a later phase"
+              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-white text-[11px] sm:text-xs font-medium shadow-xs select-none ${
+                saveStatus === "error"
+                  ? "bg-red-500"
+                  : saveStatus === "saving"
+                  ? "bg-amber-500"
+                  : "bg-[#3b82f6]"
+              }`}
+              title={
+                saveStatus === "error"
+                  ? "Shared edit save failed"
+                  : saveStatus === "saving"
+                  ? "Saving shared canvas changes"
+                  : "Can edit link"
+              }
             >
               <Edit3 className="w-3.5 h-3.5 text-white shrink-0" />
-              <span>Can edit</span>
+              <span>{getSharedEditStatusLabel(saveStatus)}</span>
             </div>
           ) : (
             <div
@@ -237,4 +417,16 @@ function getShareErrorMessage(error: unknown): string {
   }
 
   return "The shared canvas could not be loaded.";
+}
+
+function getSharedEditStatusLabel(status: SharedSaveStatus): string {
+  if (status === "saving") {
+    return "Saving...";
+  }
+
+  if (status === "error") {
+    return "Save failed";
+  }
+
+  return "Can edit";
 }

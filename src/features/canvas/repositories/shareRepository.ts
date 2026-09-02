@@ -54,6 +54,14 @@ export const shareRepository = {
     });
   },
 
+  updatePublicCanvas(token: string, sceneData: FlowBoardSceneData): Promise<PublicShare> {
+    return apiClient.patch<PublicShare, { sceneData: FlowBoardSceneData }>(
+      `/shares/${token}/canvas`,
+      { sceneData },
+      { authenticated: false }
+    );
+  },
+
   buildPublicUrl(token: string): string {
     if (typeof window === "undefined") {
       return `https://flowboard.app/app/share/${token}`;
