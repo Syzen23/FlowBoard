@@ -41,6 +41,7 @@ export function createCanvas(ownerId: string, input: CreateCanvasInput): Promise
     id: randomUUID(),
     title,
     sceneData,
+    sceneRevision: 0,
     createdAt: now,
     updatedAt: now,
   });

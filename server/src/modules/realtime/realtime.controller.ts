@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import { isHttpError, sendError } from "../../lib/httpError.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
-import { joinOwnerRealtimeCanvas, joinSharedRealtimeCanvas } from "./realtime.service.js";
+import {
+  checkpointOwnerRealtimeCanvas,
+  checkpointSharedRealtimeCanvas,
+  joinOwnerRealtimeCanvas,
+  joinSharedRealtimeCanvas,
+} from "./realtime.service.js";
 
 export async function joinOwnerRealtimeCanvasController(
   req: AuthenticatedRequest,
@@ -20,6 +25,29 @@ export async function joinSharedRealtimeCanvasController(
 ): Promise<void> {
   try {
     res.status(200).json(await joinSharedRealtimeCanvas(getAuthenticatedUid(req), getRouteParam(req, "token")));
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+}
+
+export async function checkpointOwnerRealtimeCanvasController(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    res.status(200).json(await checkpointOwnerRealtimeCanvas(getAuthenticatedUid(req), getRouteParam(req, "canvasId")));
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+}
+
+export async function checkpointSharedRealtimeCanvasController(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    getAuthenticatedUid(req);
+    res.status(200).json(await checkpointSharedRealtimeCanvas(getRouteParam(req, "token")));
   } catch (error) {
     handleControllerError(res, error);
   }

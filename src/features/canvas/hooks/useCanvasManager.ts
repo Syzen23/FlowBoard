@@ -16,14 +16,14 @@ import type {
   FlowBoardCanvasElement,
   FlowBoardCanvasFiles,
   FlowBoardExcalidrawAPI,
+  FlowBoardSceneData,
 } from "@/src/features/canvas/types";
 
 export type SaveStatus = "saved" | "saving" | "error";
 
 type PendingScene = {
-  elements: readonly FlowBoardCanvasElement[];
-  appState: FlowBoardCanvasAppState;
-  files: FlowBoardCanvasFiles;
+  sceneData: FlowBoardSceneData;
+  fingerprint: string;
 };
 
 const initializationRequests = new Map<string, Promise<CanvasWorkspace[]>>();
@@ -57,6 +57,9 @@ export function useCanvasManager(initialSelectedId?: string) {
   canvasesRef.current = canvases;
 
   const pendingScenesRef = React.useRef(new Map<string, PendingScene>());
+  const pendingSceneFingerprintsRef = React.useRef(new Map<string, string>());
+  const inFlightSceneFingerprintsRef = React.useRef(new Map<string, string>());
+  const lastSavedSceneFingerprintsRef = React.useRef(new Map<string, string>());
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const isProgrammaticUpdateRef = React.useRef(false);
   const saveRequestIdRef = React.useRef(0);
@@ -70,6 +73,9 @@ export function useCanvasManager(initialSelectedId?: string) {
     }
 
     pendingScenesRef.current.clear();
+    pendingSceneFingerprintsRef.current.clear();
+    inFlightSceneFingerprintsRef.current.clear();
+    lastSavedSceneFingerprintsRef.current.clear();
     saveRequestIdRef.current += 1;
     activeCanvasIdRef.current = "";
     canvasesRef.current = [];
@@ -118,6 +124,9 @@ export function useCanvasManager(initialSelectedId?: string) {
             : canvasRepository.getActiveCanvasId(validIds);
 
         canvasesRef.current = loadedCanvases;
+        lastSavedSceneFingerprintsRef.current = createCanvasFingerprintMap(loadedCanvases);
+        pendingSceneFingerprintsRef.current.clear();
+        inFlightSceneFingerprintsRef.current.clear();
         activeCanvasIdRef.current = nextActiveCanvasId;
         setCanvases(loadedCanvases);
         setActiveCanvasId(nextActiveCanvasId);
@@ -167,14 +176,18 @@ export function useCanvasManager(initialSelectedId?: string) {
         return true;
       }
 
-      const sceneData = normalizeSceneForStorage(
-        pendingScene.elements,
-        pendingScene.appState,
-        pendingScene.files
-      );
+      const { fingerprint, sceneData } = pendingScene;
+      if (fingerprint === lastSavedSceneFingerprintsRef.current.get(currentId)) {
+        pendingScenesRef.current.delete(currentId);
+        pendingSceneFingerprintsRef.current.delete(currentId);
+        continue;
+      }
+
       const localUpdatedAt = new Date().toISOString();
 
       pendingScenesRef.current.delete(currentId);
+      pendingSceneFingerprintsRef.current.delete(currentId);
+      inFlightSceneFingerprintsRef.current.set(currentId, fingerprint);
       setSaveStatus("saving");
 
       setCanvases((currentCanvases) => {
@@ -198,8 +211,16 @@ export function useCanvasManager(initialSelectedId?: string) {
         const savedCanvas = await canvasRepository.update(currentId, { sceneData });
 
         if (sessionIdRef.current !== sessionId || saveRequestIdRef.current !== saveRequestId) {
+          if (inFlightSceneFingerprintsRef.current.get(currentId) === fingerprint) {
+            inFlightSceneFingerprintsRef.current.delete(currentId);
+          }
           continue;
         }
+
+        if (inFlightSceneFingerprintsRef.current.get(currentId) === fingerprint) {
+          inFlightSceneFingerprintsRef.current.delete(currentId);
+        }
+        lastSavedSceneFingerprintsRef.current.set(savedCanvas.id, fingerprint);
 
         setCanvases((currentCanvases) => {
           const updatedCanvases = currentCanvases.map((canvas) =>
@@ -221,6 +242,10 @@ export function useCanvasManager(initialSelectedId?: string) {
 
         if (!pendingScenesRef.current.has(currentId)) {
           pendingScenesRef.current.set(currentId, pendingScene);
+          pendingSceneFingerprintsRef.current.set(currentId, pendingScene.fingerprint);
+        }
+        if (inFlightSceneFingerprintsRef.current.get(currentId) === pendingScene.fingerprint) {
+          inFlightSceneFingerprintsRef.current.delete(currentId);
         }
         setError(getErrorMessage(saveError));
         setSaveStatus("error");
@@ -253,11 +278,28 @@ export function useCanvasManager(initialSelectedId?: string) {
       const currentId = activeCanvasIdRef.current;
       if (!currentId) return;
 
+      const sceneData = normalizeSceneForStorage(elements, appState, files);
+      const fingerprint = createDurableSceneFingerprint(sceneData);
+      const lastSavedFingerprint = lastSavedSceneFingerprintsRef.current.get(currentId);
+      const pendingFingerprint = pendingSceneFingerprintsRef.current.get(currentId);
+      const inFlightFingerprint = inFlightSceneFingerprintsRef.current.get(currentId);
+
+      if (
+        fingerprint === lastSavedFingerprint ||
+        fingerprint === pendingFingerprint ||
+        fingerprint === inFlightFingerprint
+      ) {
+        if (pendingScenesRef.current.size === 0 && inFlightSceneFingerprintsRef.current.size === 0) {
+          setSaveStatus("saved");
+        }
+        return;
+      }
+
       pendingScenesRef.current.set(currentId, {
-        elements,
-        appState,
-        files,
+        sceneData,
+        fingerprint,
       });
+      pendingSceneFingerprintsRef.current.set(currentId, fingerprint);
 
       setSaveStatus("saving");
 
@@ -316,6 +358,10 @@ export function useCanvasManager(initialSelectedId?: string) {
         const updatedCanvases = [...canvasesRef.current, newCanvas];
 
         canvasesRef.current = updatedCanvases;
+        lastSavedSceneFingerprintsRef.current.set(
+          newCanvas.id,
+          createDurableSceneFingerprint(newCanvas.sceneData)
+        );
         setCanvases(updatedCanvases);
 
         isProgrammaticUpdateRef.current = true;
@@ -391,6 +437,10 @@ export function useCanvasManager(initialSelectedId?: string) {
 
         const currentId = activeCanvasIdRef.current;
         const updatedCanvases = canvasesRef.current.filter((canvas) => canvas.id !== id);
+        pendingScenesRef.current.delete(id);
+        pendingSceneFingerprintsRef.current.delete(id);
+        inFlightSceneFingerprintsRef.current.delete(id);
+        lastSavedSceneFingerprintsRef.current.delete(id);
 
         canvasesRef.current = updatedCanvases;
         setCanvases(updatedCanvases);
@@ -471,6 +521,50 @@ async function loadOrCreateDefaultCanvas(): Promise<CanvasWorkspace[]> {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Canvas persistence failed";
+}
+
+function createCanvasFingerprintMap(canvases: CanvasWorkspace[]): Map<string, string> {
+  return new Map(
+    canvases.map((canvas) => [canvas.id, createDurableSceneFingerprint(canvas.sceneData)])
+  );
+}
+
+function createDurableSceneFingerprint(sceneData?: FlowBoardSceneData): string {
+  const normalizedScene = normalizeSceneForStorage(
+    sceneData?.elements ?? [],
+    sceneData?.appState,
+    sceneData?.files ?? {}
+  );
+
+  return stableStringify({
+    elements: normalizedScene.elements,
+    files: normalizedScene.files,
+  });
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortObjectKeys(value));
+}
+
+function sortObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortObjectKeys);
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = sortObjectKeys(value[key]);
+      return result;
+    }, {});
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export type CanvasManager = ReturnType<typeof useCanvasManager>;

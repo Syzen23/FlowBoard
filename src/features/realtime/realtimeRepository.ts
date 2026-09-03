@@ -2,6 +2,7 @@ import { apiClient } from "@/src/lib/apiClient";
 import { getFirebaseAuth, getFirebaseRealtimeDatabase } from "../auth/firebaseClient";
 import { get, ref } from "firebase/database";
 import type {
+  CheckpointRealtimeRoomResult,
   JoinRealtimeRoomResult,
   RealtimeAccessRecord,
   RealtimeRoomMeta,
@@ -19,6 +20,20 @@ export const realtimeRepository = {
   joinSharedRoom(token: string): Promise<JoinRealtimeRoomResult> {
     return apiClient.post<JoinRealtimeRoomResult, Record<string, never>>(
       `/realtime/shares/${encodeURIComponent(token)}/join`,
+      {}
+    );
+  },
+
+  checkpointOwnerRoom(canvasId: string): Promise<CheckpointRealtimeRoomResult> {
+    return apiClient.post<CheckpointRealtimeRoomResult, Record<string, never>>(
+      `/realtime/canvases/${encodeURIComponent(canvasId)}/checkpoint`,
+      {}
+    );
+  },
+
+  checkpointSharedRoom(token: string): Promise<CheckpointRealtimeRoomResult> {
+    return apiClient.post<CheckpointRealtimeRoomResult, Record<string, never>>(
+      `/realtime/shares/${encodeURIComponent(token)}/checkpoint`,
       {}
     );
   },

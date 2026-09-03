@@ -17,10 +17,24 @@ export type RealtimeRoomMeta = {
   initializedAt?: number;
   initializedFromRevision: number;
   initializationId?: string;
+  lastCheckpointRevision?: number;
+  lastCheckpointAt?: number;
+  checkpoint?: RealtimeCheckpointLease | null;
 };
 
 export type JoinRealtimeRoomResult = {
   canvasId: string;
   permission: RealtimeCanvasPermission;
   roomStatus: "ready";
+};
+
+export type RealtimeCheckpointLease = {
+  id: string;
+  status: "running";
+  startedAt: number;
+};
+
+export type RealtimeRoomData = {
+  meta: RealtimeRoomMeta;
+  elements: Record<string, unknown>;
 };

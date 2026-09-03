@@ -30,3 +30,9 @@ export type RealtimeRoomSnapshot = {
   elements: Record<string, unknown>;
   files: Record<string, unknown>;
 };
+
+export type CheckpointRealtimeRoomResult = {
+  canvasId: string;
+  sceneRevision: number;
+  checkpointedAt: string;
+};

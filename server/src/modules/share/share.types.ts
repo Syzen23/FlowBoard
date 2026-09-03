@@ -15,6 +15,7 @@ export type SharedCanvas = {
   id: string;
   title: string;
   sceneData: CanvasSceneData;
+  sceneRevision: number;
   updatedAt: string;
 };
 

@@ -44,6 +44,8 @@ export function SharedCanvasWorkspace({
   const pendingSceneRef = React.useRef<FlowBoardSceneData | null>(null);
   const isSavingRef = React.useRef(false);
   const isProgrammaticUpdateRef = React.useRef(false);
+  const lastSavedSceneFingerprintRef = React.useRef<string | null>(null);
+  const pendingSceneFingerprintRef = React.useRef<string | null>(null);
   const saveRequestIdRef = React.useRef(0);
   const permissionRef = React.useRef<PublicShare["permission"] | null>(null);
   permissionRef.current = sharedCanvas?.permission ?? null;
@@ -62,6 +64,8 @@ export function SharedCanvasWorkspace({
     setErrorMessage(null);
     setSaveStatus("saved");
     pendingSceneRef.current = null;
+    pendingSceneFingerprintRef.current = null;
+    lastSavedSceneFingerprintRef.current = null;
     saveRequestIdRef.current += 1;
 
     if (debounceTimerRef.current) {
@@ -75,6 +79,8 @@ export function SharedCanvasWorkspace({
         if (!isCurrentRequest) return;
 
         isProgrammaticUpdateRef.current = true;
+        lastSavedSceneFingerprintRef.current = createSceneFingerprint(share.canvas.sceneData);
+        pendingSceneFingerprintRef.current = null;
         setSharedCanvas(share);
         setStatus("success");
 
@@ -138,6 +144,8 @@ export function SharedCanvasWorkspace({
     try {
       const share = await shareRepository.getPublicShare(shareToken);
       isProgrammaticUpdateRef.current = true;
+      lastSavedSceneFingerprintRef.current = createSceneFingerprint(share.canvas.sceneData);
+      pendingSceneFingerprintRef.current = null;
       setSharedCanvas(share);
       setStatus("success");
       setErrorMessage(null);
@@ -173,13 +181,16 @@ export function SharedCanvasWorkspace({
     try {
       while (pendingSceneRef.current && permissionRef.current === "edit") {
         const sceneData = pendingSceneRef.current;
+        const sceneFingerprint = pendingSceneFingerprintRef.current ?? createSceneFingerprint(sceneData);
         pendingSceneRef.current = null;
+        pendingSceneFingerprintRef.current = null;
         const saveRequestId = saveRequestIdRef.current + 1;
         saveRequestIdRef.current = saveRequestId;
         setSaveStatus("saving");
 
         try {
           await shareRepository.updatePublicCanvas(shareToken, sceneData);
+          lastSavedSceneFingerprintRef.current = sceneFingerprint;
 
           if (saveRequestIdRef.current === saveRequestId) {
             setSaveStatus(pendingSceneRef.current ? "saving" : "saved");
@@ -202,6 +213,7 @@ export function SharedCanvasWorkspace({
 
           if (!pendingSceneRef.current) {
             pendingSceneRef.current = sceneData;
+            pendingSceneFingerprintRef.current = sceneFingerprint;
           }
 
           setErrorMessage(getShareErrorMessage(error));
@@ -221,6 +233,7 @@ export function SharedCanvasWorkspace({
       }
       saveRequestIdRef.current += 1;
       pendingSceneRef.current = null;
+      pendingSceneFingerprintRef.current = null;
       isSavingRef.current = false;
     };
   }, []);
@@ -239,11 +252,25 @@ export function SharedCanvasWorkspace({
         viewModeEnabled: false,
       });
 
-      pendingSceneRef.current = normalizeSceneForStorage(
+      const nextScene = normalizeSceneForStorage(
         elements,
         flowBoardAppState,
         files
       );
+      const nextSceneFingerprint = createSceneFingerprint(nextScene);
+
+      if (
+        nextSceneFingerprint === lastSavedSceneFingerprintRef.current ||
+        nextSceneFingerprint === pendingSceneFingerprintRef.current
+      ) {
+        if (!pendingSceneRef.current && !isSavingRef.current) {
+          setSaveStatus("saved");
+        }
+        return;
+      }
+
+      pendingSceneRef.current = nextScene;
+      pendingSceneFingerprintRef.current = nextSceneFingerprint;
       setSaveStatus("saving");
 
       if (debounceTimerRef.current) {
@@ -292,7 +319,7 @@ export function SharedCanvasWorkspace({
 
   return (
     <div className="relative w-full h-screen bg-[#141416] text-zinc-100 flex flex-col overflow-hidden select-none">
-      <div className={`absolute inset-0 z-0 flowboard-excalidraw ${canEdit ? "" : "pointer-events-none"}`}>
+      <div className="absolute inset-0 z-0 flowboard-excalidraw">
         <Excalidraw
           key={`${shareToken}-${sharedCanvas.canvas.updatedAt}`}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
@@ -429,4 +456,38 @@ function getSharedEditStatusLabel(status: SharedSaveStatus): string {
   }
 
   return "Can edit";
+}
+
+function createSceneFingerprint(sceneData?: FlowBoardSceneData): string {
+  const normalizedScene = normalizeSceneForStorage(
+    sceneData?.elements ?? [],
+    sceneData?.appState,
+    sceneData?.files ?? {}
+  );
+
+  return stableStringify(normalizedScene);
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortValue(value));
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortValue);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, childValue]) => [key, sortValue(childValue)])
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

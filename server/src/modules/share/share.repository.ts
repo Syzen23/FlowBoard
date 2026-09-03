@@ -21,6 +21,7 @@ type SharedCanvasRow = {
   canvas_id: string;
   title: string;
   scene_data: CanvasSceneData;
+  scene_revision: number | string;
   canvas_updated_at: Date | string;
   permission: SharePermission;
 };
@@ -87,6 +88,7 @@ export const shareRepository = {
       `SELECT canvases.id AS canvas_id,
               canvases.title,
               canvases.scene_data,
+              canvases.scene_revision,
               canvases.updated_at AS canvas_updated_at,
               canvas_shares.permission
        FROM canvas_shares
@@ -105,6 +107,7 @@ export const shareRepository = {
               canvases.id AS canvas_id,
               canvases.title,
               canvases.scene_data,
+              canvases.scene_revision,
               canvases.updated_at AS canvas_updated_at,
               canvas_shares.permission
        FROM canvas_shares
@@ -121,6 +124,7 @@ export const shareRepository = {
     const result = await db.query<SharedCanvasRow>(
       `UPDATE canvases
        SET scene_data = $2::jsonb,
+           scene_revision = scene_revision + 1,
            updated_at = NOW()
        FROM canvas_shares
        WHERE canvas_shares.canvas_id = canvases.id
@@ -128,6 +132,7 @@ export const shareRepository = {
        RETURNING canvases.id AS canvas_id,
                  canvases.title,
                  canvases.scene_data,
+                 canvases.scene_revision,
                  canvases.updated_at AS canvas_updated_at,
                  canvas_shares.permission`,
       [token, JSON.stringify(sceneData)]
@@ -154,6 +159,7 @@ function mapSharedCanvasRow(row: SharedCanvasRow): SharedCanvasPayload {
       id: row.canvas_id,
       title: row.title,
       sceneData: row.scene_data,
+      sceneRevision: toSafeNumber(row.scene_revision),
       updatedAt: toIsoString(row.canvas_updated_at),
     },
     permission: row.permission,
@@ -174,4 +180,13 @@ function mapRealtimeShareAccessRow(row: SharedCanvasRow): RealtimeShareAccess {
 
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value;
+}
+
+function toSafeNumber(value: number | string): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error("Canvas scene_revision is not a safe integer");
+  }
+
+  return parsed;
 }
