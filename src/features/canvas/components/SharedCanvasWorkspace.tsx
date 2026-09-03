@@ -8,6 +8,11 @@ import {
   type PublicShare,
   shareRepository,
 } from "@/src/features/canvas/repositories/shareRepository";
+import { realtimeRepository } from "@/src/features/realtime/realtimeRepository";
+import {
+  createRealtimeElementsFingerprint,
+  useRealtimeElementReceiver,
+} from "@/src/features/realtime/useRealtimeElementReceiver";
 import {
   applyAppStateToExcalidraw,
   createFlowBoardAppState,
@@ -46,6 +51,7 @@ export function SharedCanvasWorkspace({
   const isProgrammaticUpdateRef = React.useRef(false);
   const lastSavedSceneFingerprintRef = React.useRef<string | null>(null);
   const pendingSceneFingerprintRef = React.useRef<string | null>(null);
+  const remoteAppliedElementsFingerprintRef = React.useRef<string | null>(null);
   const saveRequestIdRef = React.useRef(0);
   const permissionRef = React.useRef<PublicShare["permission"] | null>(null);
   permissionRef.current = sharedCanvas?.permission ?? null;
@@ -66,6 +72,7 @@ export function SharedCanvasWorkspace({
     pendingSceneRef.current = null;
     pendingSceneFingerprintRef.current = null;
     lastSavedSceneFingerprintRef.current = null;
+    remoteAppliedElementsFingerprintRef.current = null;
     saveRequestIdRef.current += 1;
 
     if (debounceTimerRef.current) {
@@ -234,9 +241,30 @@ export function SharedCanvasWorkspace({
       saveRequestIdRef.current += 1;
       pendingSceneRef.current = null;
       pendingSceneFingerprintRef.current = null;
+      remoteAppliedElementsFingerprintRef.current = null;
       isSavingRef.current = false;
     };
   }, []);
+
+  const joinSharedRealtimeRoom = React.useCallback(() => {
+    return realtimeRepository.joinSharedRoom(shareToken);
+  }, [shareToken]);
+
+  const handleRealtimeError = React.useCallback((realtimeError: unknown) => {
+    console.warn("FlowBoard shared realtime receiver unavailable", realtimeError);
+  }, []);
+
+  useRealtimeElementReceiver({
+    enabled: status === "success" && Boolean(sharedCanvas),
+    roomKey: shareToken,
+    excalidrawAPI,
+    joinRoom: joinSharedRealtimeRoom,
+    isProgrammaticUpdateRef,
+    onRemoteElementsApplied: (elements) => {
+      remoteAppliedElementsFingerprintRef.current = createRealtimeElementsFingerprint(elements);
+    },
+    onError: handleRealtimeError,
+  });
 
   const handleSharedSceneChange = React.useCallback(
     (
@@ -245,6 +273,15 @@ export function SharedCanvasWorkspace({
       files: FlowBoardCanvasFiles
     ) => {
       if (!isEditable || isProgrammaticUpdateRef.current) {
+        return;
+      }
+
+      const nextElementsFingerprint = createRealtimeElementsFingerprint(elements);
+      if (nextElementsFingerprint === remoteAppliedElementsFingerprintRef.current) {
+        remoteAppliedElementsFingerprintRef.current = null;
+        if (!pendingSceneRef.current && !isSavingRef.current) {
+          setSaveStatus("saved");
+        }
         return;
       }
 

@@ -11,6 +11,8 @@ import { WorkspaceSwitcher } from "@/src/features/navigation/WorkspaceSwitcher";
 import { CanvasMenu } from "@/src/features/canvas/components/CanvasMenu";
 import { ConvertTaskDialog } from "@/src/features/canvas/components/ConvertTaskDialog";
 import { ShareCanvasDialog } from "@/src/features/canvas/components/ShareCanvasDialog";
+import { realtimeRepository } from "@/src/features/realtime/realtimeRepository";
+import { useRealtimeElementReceiver } from "@/src/features/realtime/useRealtimeElementReceiver";
 import { RouteMode } from "@/src/types";
 import { CanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 import {
@@ -52,7 +54,28 @@ export function CanvasWorkspace({
     renameCanvas,
     deleteCanvas,
     isProgrammaticUpdateRef,
+    markRemoteElementsApplied,
   } = canvasManager;
+
+  const joinOwnerRealtimeRoom = React.useCallback(() => {
+    return realtimeRepository.joinOwnerRoom(activeCanvasId);
+  }, [activeCanvasId]);
+
+  const handleRealtimeError = React.useCallback((realtimeError: unknown) => {
+    console.warn("FlowBoard owner realtime receiver unavailable", realtimeError);
+  }, []);
+
+  useRealtimeElementReceiver({
+    enabled: isInitialized && Boolean(activeCanvasId),
+    roomKey: activeCanvasId,
+    excalidrawAPI,
+    joinRoom: joinOwnerRealtimeRoom,
+    isProgrammaticUpdateRef,
+    onRemoteElementsApplied: (elements, files) => {
+      markRemoteElementsApplied(activeCanvasId, elements, files);
+    },
+    onError: handleRealtimeError,
+  });
 
   const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
     if (!excalidrawAPI) return;

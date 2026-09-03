@@ -60,6 +60,7 @@ export function useCanvasManager(initialSelectedId?: string) {
   const pendingSceneFingerprintsRef = React.useRef(new Map<string, string>());
   const inFlightSceneFingerprintsRef = React.useRef(new Map<string, string>());
   const lastSavedSceneFingerprintsRef = React.useRef(new Map<string, string>());
+  const remoteAppliedSceneFingerprintsRef = React.useRef(new Map<string, string>());
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const isProgrammaticUpdateRef = React.useRef(false);
   const saveRequestIdRef = React.useRef(0);
@@ -76,6 +77,7 @@ export function useCanvasManager(initialSelectedId?: string) {
     pendingSceneFingerprintsRef.current.clear();
     inFlightSceneFingerprintsRef.current.clear();
     lastSavedSceneFingerprintsRef.current.clear();
+    remoteAppliedSceneFingerprintsRef.current.clear();
     saveRequestIdRef.current += 1;
     activeCanvasIdRef.current = "";
     canvasesRef.current = [];
@@ -127,6 +129,7 @@ export function useCanvasManager(initialSelectedId?: string) {
         lastSavedSceneFingerprintsRef.current = createCanvasFingerprintMap(loadedCanvases);
         pendingSceneFingerprintsRef.current.clear();
         inFlightSceneFingerprintsRef.current.clear();
+        remoteAppliedSceneFingerprintsRef.current.clear();
         activeCanvasIdRef.current = nextActiveCanvasId;
         setCanvases(loadedCanvases);
         setActiveCanvasId(nextActiveCanvasId);
@@ -283,12 +286,17 @@ export function useCanvasManager(initialSelectedId?: string) {
       const lastSavedFingerprint = lastSavedSceneFingerprintsRef.current.get(currentId);
       const pendingFingerprint = pendingSceneFingerprintsRef.current.get(currentId);
       const inFlightFingerprint = inFlightSceneFingerprintsRef.current.get(currentId);
+      const remoteAppliedFingerprint = remoteAppliedSceneFingerprintsRef.current.get(currentId);
 
       if (
+        fingerprint === remoteAppliedFingerprint ||
         fingerprint === lastSavedFingerprint ||
         fingerprint === pendingFingerprint ||
         fingerprint === inFlightFingerprint
       ) {
+        if (fingerprint === remoteAppliedFingerprint) {
+          remoteAppliedSceneFingerprintsRef.current.delete(currentId);
+        }
         if (pendingScenesRef.current.size === 0 && inFlightSceneFingerprintsRef.current.size === 0) {
           setSaveStatus("saved");
         }
@@ -441,6 +449,7 @@ export function useCanvasManager(initialSelectedId?: string) {
         pendingSceneFingerprintsRef.current.delete(id);
         inFlightSceneFingerprintsRef.current.delete(id);
         lastSavedSceneFingerprintsRef.current.delete(id);
+        remoteAppliedSceneFingerprintsRef.current.delete(id);
 
         canvasesRef.current = updatedCanvases;
         setCanvases(updatedCanvases);
@@ -476,6 +485,20 @@ export function useCanvasManager(initialSelectedId?: string) {
     return canvases.find((canvas) => canvas.id === activeCanvasId) || canvases[0] || loadingCanvas;
   }, [canvases, activeCanvasId]);
 
+  const markRemoteElementsApplied = React.useCallback(
+    (
+      canvasId: string,
+      elements: readonly FlowBoardCanvasElement[],
+      files: FlowBoardCanvasFiles
+    ) => {
+      remoteAppliedSceneFingerprintsRef.current.set(
+        canvasId,
+        createDurableSceneFingerprint({ elements: [...elements], files })
+      );
+    },
+    []
+  );
+
   return {
     canvases,
     activeCanvas,
@@ -491,6 +514,7 @@ export function useCanvasManager(initialSelectedId?: string) {
     deleteCanvas,
     flushCurrentScene,
     isProgrammaticUpdateRef,
+    markRemoteElementsApplied,
   };
 }
 

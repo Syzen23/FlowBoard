@@ -44,6 +44,11 @@ export type RealtimeElementSubscriptionHandlers = {
 
 export type RealtimeUnsubscribe = () => void;
 
+export type PublishRealtimeElementsResult = {
+  publishedCount: number;
+  skippedInvalidCount: number;
+};
+
 export type CheckpointRealtimeRoomResult = {
   canvasId: string;
   sceneRevision: number;

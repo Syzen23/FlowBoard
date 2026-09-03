@@ -1,9 +1,18 @@
 import { apiClient } from "@/src/lib/apiClient";
 import { getFirebaseAuth, getFirebaseRealtimeDatabase } from "../auth/firebaseClient";
-import { get, onChildAdded, onChildChanged, onChildRemoved, ref, type DataSnapshot } from "firebase/database";
+import {
+  get,
+  onChildAdded,
+  onChildChanged,
+  onChildRemoved,
+  ref,
+  update,
+  type DataSnapshot,
+} from "firebase/database";
 import type {
   CheckpointRealtimeRoomResult,
   JoinRealtimeRoomResult,
+  PublishRealtimeElementsResult,
   RealtimeAccessRecord,
   RealtimeCanvasElement,
   RealtimeElementSubscriptionHandlers,
@@ -122,6 +131,43 @@ export const realtimeRepository = {
       unsubscribeRemoved();
     };
   },
+
+  async publishElementChanges(
+    canvasId: string,
+    elements: readonly unknown[]
+  ): Promise<PublishRealtimeElementsResult> {
+    const updates: Record<string, unknown> = {};
+    let skippedInvalidCount = 0;
+
+    for (const element of elements) {
+      const elementId = getRealtimeElementId(element);
+      if (!elementId) {
+        skippedInvalidCount += 1;
+        continue;
+      }
+
+      const jsonSafeElement = toRealtimeJsonValue(element);
+      if (!isRecord(jsonSafeElement) || jsonSafeElement.id !== elementId) {
+        skippedInvalidCount += 1;
+        continue;
+      }
+
+      updates[elementId] = jsonSafeElement;
+    }
+
+    const publishedCount = Object.keys(updates).length;
+    if (publishedCount > 0) {
+      await update(
+        ref(getFirebaseRealtimeDatabase(), `realtime/canvases/${canvasId}/elements`),
+        updates
+      );
+    }
+
+    return {
+      publishedCount,
+      skippedInvalidCount,
+    };
+  },
 };
 
 function snapshotToRealtimeElement(snapshot: DataSnapshot): RealtimeCanvasElement | null {
@@ -133,6 +179,36 @@ function snapshotToRealtimeElement(snapshot: DataSnapshot): RealtimeCanvasElemen
   }
 
   return value as unknown as RealtimeCanvasElement;
+}
+
+function getRealtimeElementId(element: unknown): string | null {
+  if (!isRecord(element) || typeof element.id !== "string" || element.id.trim().length === 0) {
+    return null;
+  }
+
+  return element.id;
+}
+
+function toRealtimeJsonValue(value: unknown): unknown {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(toRealtimeJsonValue);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.entries(value).reduce<Record<string, unknown>>((result, [key, childValue]) => {
+    if (childValue !== undefined) {
+      result[key] = toRealtimeJsonValue(childValue);
+    }
+
+    return result;
+  }, {});
 }
 
 function normalizeAccessRecord(value: unknown): RealtimeAccessRecord | null {
