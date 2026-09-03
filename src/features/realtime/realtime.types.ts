@@ -16,4 +16,17 @@ export type RealtimeRoomMeta = {
   initializationStartedAt?: number;
   initializedAt?: number;
   initializedFromRevision: number;
+  initializationId?: string;
+};
+
+export type JoinRealtimeRoomResult = {
+  canvasId: string;
+  permission: RealtimeCanvasPermission;
+  roomStatus: "ready";
+};
+
+export type RealtimeRoomSnapshot = {
+  meta: RealtimeRoomMeta | null;
+  elements: Record<string, unknown>;
+  files: Record<string, unknown>;
 };
