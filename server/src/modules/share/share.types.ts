@@ -23,6 +23,12 @@ export type SharedCanvasPayload = {
   permission: SharePermission;
 };
 
+export type RealtimeShareAccess = {
+  shareId: string;
+  canvas: SharedCanvas;
+  permission: SharePermission;
+};
+
 export type UpdateShareInput = {
   permission?: unknown;
 };

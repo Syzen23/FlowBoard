@@ -1,6 +1,11 @@
 import { db } from "../../database/db.js";
 import type { CanvasSceneData } from "../canvas/canvas.types.js";
-import type { CanvasShare, SharedCanvasPayload, SharePermission } from "./share.types.js";
+import type {
+  CanvasShare,
+  RealtimeShareAccess,
+  SharedCanvasPayload,
+  SharePermission,
+} from "./share.types.js";
 
 type ShareRow = {
   id: string;
@@ -12,6 +17,7 @@ type ShareRow = {
 };
 
 type SharedCanvasRow = {
+  share_id?: string;
   canvas_id: string;
   title: string;
   scene_data: CanvasSceneData;
@@ -93,6 +99,24 @@ export const shareRepository = {
     return result.rows[0] ? mapSharedCanvasRow(result.rows[0]) : null;
   },
 
+  async findRealtimeAccessByToken(token: string): Promise<RealtimeShareAccess | null> {
+    const result = await db.query<SharedCanvasRow>(
+      `SELECT canvas_shares.id AS share_id,
+              canvases.id AS canvas_id,
+              canvases.title,
+              canvases.scene_data,
+              canvases.updated_at AS canvas_updated_at,
+              canvas_shares.permission
+       FROM canvas_shares
+       INNER JOIN canvases
+         ON canvases.id = canvas_shares.canvas_id
+       WHERE canvas_shares.token = $1`,
+      [token]
+    );
+
+    return result.rows[0] ? mapRealtimeShareAccessRow(result.rows[0]) : null;
+  },
+
   async updateSharedCanvasScene(token: string, sceneData: CanvasSceneData): Promise<SharedCanvasPayload | null> {
     const result = await db.query<SharedCanvasRow>(
       `UPDATE canvases
@@ -132,6 +156,18 @@ function mapSharedCanvasRow(row: SharedCanvasRow): SharedCanvasPayload {
       sceneData: row.scene_data,
       updatedAt: toIsoString(row.canvas_updated_at),
     },
+    permission: row.permission,
+  };
+}
+
+function mapRealtimeShareAccessRow(row: SharedCanvasRow): RealtimeShareAccess {
+  if (!row.share_id) {
+    throw new Error("Realtime share access row is missing share_id");
+  }
+
+  return {
+    shareId: row.share_id,
+    canvas: mapSharedCanvasRow(row).canvas,
     permission: row.permission,
   };
 }

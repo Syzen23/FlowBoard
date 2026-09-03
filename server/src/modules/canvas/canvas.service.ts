@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { badRequest, notFound } from "../../lib/httpError.js";
+import { realtimeRepository } from "../realtime/realtime.repository.js";
 import { canvasRepository } from "./canvas.repository.js";
 import type {
   Canvas,
@@ -72,6 +73,13 @@ export async function deleteCanvas(ownerId: string, id: string): Promise<void> {
   if (!isUuid(id)) {
     throw notFound("Canvas not found");
   }
+
+  const canvas = await canvasRepository.findById(ownerId, id);
+  if (!canvas) {
+    throw notFound("Canvas not found");
+  }
+
+  await realtimeRepository.removeCanvasRealtimeData(id);
 
   const deleted = await canvasRepository.remove(ownerId, id);
   if (!deleted) {

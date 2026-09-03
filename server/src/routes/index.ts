@@ -3,6 +3,7 @@ import { db } from "../database/db.js";
 import { getFirebaseAdminDatabase } from "../modules/auth/firebaseAdmin.js";
 import { authRouter } from "../modules/auth/auth.routes.js";
 import { canvasRouter } from "../modules/canvas/canvas.routes.js";
+import { realtimeRouter } from "../modules/realtime/realtime.routes.js";
 import { ownerShareRouter, publicShareRouter } from "../modules/share/share.routes.js";
 import { taskRouter } from "../modules/task/task.routes.js";
 
@@ -46,5 +47,6 @@ apiRouter.get("/health/realtime", async (_req, res) => {
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/canvases", ownerShareRouter);
 apiRouter.use("/canvases", canvasRouter);
+apiRouter.use("/realtime", realtimeRouter);
 apiRouter.use("/shares", publicShareRouter);
 apiRouter.use("/tasks", taskRouter);

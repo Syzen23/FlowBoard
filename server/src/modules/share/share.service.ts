@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { badRequest, forbidden, notFound } from "../../lib/httpError.js";
 import { canvasRepository } from "../canvas/canvas.repository.js";
 import type { CanvasSceneData } from "../canvas/canvas.types.js";
+import { realtimeRepository } from "../realtime/realtime.repository.js";
 import { shareRepository } from "./share.repository.js";
 import type {
   CanvasShare,
@@ -33,7 +34,9 @@ export async function upsertCanvasShare(
   const existingShare = await shareRepository.findByCanvasForOwner(ownerId, canvasId);
 
   if (existingShare) {
-    return shareRepository.updatePermission(existingShare.id, permission);
+    const updatedShare = await shareRepository.updatePermission(existingShare.id, permission);
+    await realtimeRepository.updateShareAccessPermission(updatedShare.canvasId, updatedShare.id, updatedShare.permission);
+    return updatedShare;
   }
 
   return shareRepository.create(randomUUID(), canvasId, createShareToken(), permission);
@@ -41,7 +44,12 @@ export async function upsertCanvasShare(
 
 export async function revokeCanvasShare(ownerId: string, canvasId: string): Promise<void> {
   await assertOwnedCanvasExists(ownerId, canvasId);
+  const existingShare = await shareRepository.findByCanvasForOwner(ownerId, canvasId);
   await shareRepository.removeByCanvasForOwner(ownerId, canvasId);
+
+  if (existingShare) {
+    await realtimeRepository.removeShareAccess(existingShare.canvasId, existingShare.id);
+  }
 }
 
 export async function getSharedCanvasByToken(token: string): Promise<SharedCanvasPayload> {
