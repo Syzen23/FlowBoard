@@ -1,12 +1,15 @@
 import { apiClient } from "@/src/lib/apiClient";
 import { getFirebaseAuth, getFirebaseRealtimeDatabase } from "../auth/firebaseClient";
-import { get, ref } from "firebase/database";
+import { get, onChildAdded, onChildChanged, onChildRemoved, ref, type DataSnapshot } from "firebase/database";
 import type {
   CheckpointRealtimeRoomResult,
   JoinRealtimeRoomResult,
   RealtimeAccessRecord,
+  RealtimeCanvasElement,
+  RealtimeElementSubscriptionHandlers,
   RealtimeRoomMeta,
   RealtimeRoomSnapshot,
+  RealtimeUnsubscribe,
 } from "./realtime.types";
 
 export const realtimeRepository = {
@@ -60,7 +63,77 @@ export const realtimeRepository = {
       elements: elementsSnapshot.val(),
     });
   },
+
+  subscribeToElements(
+    canvasId: string,
+    handlers: RealtimeElementSubscriptionHandlers
+  ): RealtimeUnsubscribe {
+    const elementsRef = ref(
+      getFirebaseRealtimeDatabase(),
+      `realtime/canvases/${canvasId}/elements`
+    );
+
+    const handleError = (error: Error) => {
+      handlers.onError?.(error);
+    };
+
+    const unsubscribeAdded = onChildAdded(
+      elementsRef,
+      (snapshot) => {
+        const element = snapshotToRealtimeElement(snapshot);
+        if (element) {
+          handlers.onAdded(element);
+        }
+      },
+      handleError
+    );
+
+    const unsubscribeChanged = onChildChanged(
+      elementsRef,
+      (snapshot) => {
+        const element = snapshotToRealtimeElement(snapshot);
+        if (element) {
+          handlers.onChanged(element);
+        }
+      },
+      handleError
+    );
+
+    const unsubscribeRemoved = onChildRemoved(
+      elementsRef,
+      (snapshot) => {
+        const elementId = snapshot.key;
+        if (typeof elementId === "string") {
+          handlers.onRemoved?.(elementId);
+        }
+      },
+      handleError
+    );
+
+    let isUnsubscribed = false;
+    return () => {
+      if (isUnsubscribed) {
+        return;
+      }
+
+      isUnsubscribed = true;
+      unsubscribeAdded();
+      unsubscribeChanged();
+      unsubscribeRemoved();
+    };
+  },
 };
+
+function snapshotToRealtimeElement(snapshot: DataSnapshot): RealtimeCanvasElement | null {
+  const elementId = snapshot.key;
+  const value = snapshot.val();
+
+  if (typeof elementId !== "string" || !isRecord(value) || value.id !== elementId) {
+    return null;
+  }
+
+  return value as unknown as RealtimeCanvasElement;
+}
 
 function normalizeAccessRecord(value: unknown): RealtimeAccessRecord | null {
   if (!isRecord(value)) {

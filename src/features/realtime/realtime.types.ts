@@ -1,3 +1,5 @@
+import type { FlowBoardCanvasElement } from "@/src/features/canvas/types";
+
 export type RealtimeCanvasPermission = "view" | "edit";
 
 export type RealtimeAccessSource = "owner" | "share";
@@ -30,6 +32,17 @@ export type RealtimeRoomSnapshot = {
   elements: Record<string, unknown>;
   files: Record<string, unknown>;
 };
+
+export type RealtimeCanvasElement = FlowBoardCanvasElement;
+
+export type RealtimeElementSubscriptionHandlers = {
+  onAdded: (element: RealtimeCanvasElement) => void;
+  onChanged: (element: RealtimeCanvasElement) => void;
+  onRemoved?: (elementId: string) => void;
+  onError?: (error: Error) => void;
+};
+
+export type RealtimeUnsubscribe = () => void;
 
 export type CheckpointRealtimeRoomResult = {
   canvasId: string;
