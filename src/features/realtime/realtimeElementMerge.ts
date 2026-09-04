@@ -31,11 +31,15 @@ export function mergeRealtimeElements(
         validIncomingElements as unknown as Parameters<typeof reconcileElements>[1],
         appState as AppState
       ) as RealtimeCanvasElement[];
+      const completeReconciledElements = ensureIncomingElementsIncluded(
+        reconciledElements,
+        validIncomingElements
+      );
 
       return {
-        elements: reconciledElements,
-        changed: !areElementCollectionsEqual(currentElements, reconciledElements),
-        appliedCount: countAppliedElements(currentElements, reconciledElements),
+        elements: completeReconciledElements,
+        changed: !areElementCollectionsEqual(currentElements, completeReconciledElements),
+        appliedCount: countAppliedElements(currentElements, completeReconciledElements),
         ignoredCount: incomingElements.length - validIncomingElements.length,
       };
     } catch (error) {
@@ -44,6 +48,35 @@ export function mergeRealtimeElements(
   }
 
   return fallbackMergeRealtimeElements(currentElements, validIncomingElements, incomingElements.length);
+}
+
+function ensureIncomingElementsIncluded(
+  mergedElements: RealtimeCanvasElement[],
+  incomingElements: readonly RealtimeCanvasElement[]
+): RealtimeCanvasElement[] {
+  const mergedIds = new Set<string>();
+  for (const element of mergedElements) {
+    const realtimeElement = toRealtimeElement(element);
+    if (realtimeElement) {
+      mergedIds.add(realtimeElement.id);
+    }
+  }
+
+  let completeElements = mergedElements;
+  for (const incomingElement of incomingElements) {
+    if (mergedIds.has(incomingElement.id)) {
+      continue;
+    }
+
+    if (completeElements === mergedElements) {
+      completeElements = [...mergedElements];
+    }
+
+    insertNewRemoteElement(completeElements, incomingElement);
+    mergedIds.add(incomingElement.id);
+  }
+
+  return completeElements;
 }
 
 export function toRealtimeElement(value: unknown, expectedId?: string | null): RealtimeCanvasElement | null {

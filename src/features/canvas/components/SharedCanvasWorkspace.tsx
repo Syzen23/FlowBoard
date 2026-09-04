@@ -14,6 +14,10 @@ import {
   useRealtimeElementReceiver,
 } from "@/src/features/realtime/useRealtimeElementReceiver";
 import {
+  type RealtimeElementPublisher,
+  useRealtimeElementPublisher,
+} from "@/src/features/realtime/useRealtimeElementPublisher";
+import {
   applyAppStateToExcalidraw,
   createFlowBoardAppState,
   createScenePayload,
@@ -44,6 +48,12 @@ export function SharedCanvasWorkspace({
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<SharedSaveStatus>("saved");
+  const markPublisherRemoteBaselineRef = React.useRef<
+    RealtimeElementPublisher["markRemoteElementsApplied"] | null
+  >(null);
+  const acknowledgePublisherEchoRef = React.useRef<
+    RealtimeElementPublisher["acknowledgePublishedEcho"] | null
+  >(null);
 
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const pendingSceneRef = React.useRef<FlowBoardSceneData | null>(null);
@@ -254,7 +264,7 @@ export function SharedCanvasWorkspace({
     console.warn("FlowBoard shared realtime receiver unavailable", realtimeError);
   }, []);
 
-  useRealtimeElementReceiver({
+  const realtimeReceiverStatus = useRealtimeElementReceiver({
     enabled: status === "success" && Boolean(sharedCanvas),
     roomKey: shareToken,
     excalidrawAPI,
@@ -262,9 +272,21 @@ export function SharedCanvasWorkspace({
     isProgrammaticUpdateRef,
     onRemoteElementsApplied: (elements) => {
       remoteAppliedElementsFingerprintRef.current = createRealtimeElementsFingerprint(elements);
+      markPublisherRemoteBaselineRef.current?.(elements);
     },
+    shouldIgnoreIncomingElement: (element) => acknowledgePublisherEchoRef.current?.(element) ?? false,
     onError: handleRealtimeError,
   });
+
+  const realtimePublisher = useRealtimeElementPublisher({
+    enabled: realtimeReceiverStatus === "ready" && status === "success" && isEditable,
+    canvasId: sharedCanvas?.canvas.id ?? null,
+    excalidrawAPI,
+    isProgrammaticUpdateRef,
+    onError: handleRealtimeError,
+  });
+  markPublisherRemoteBaselineRef.current = realtimePublisher.markRemoteElementsApplied;
+  acknowledgePublisherEchoRef.current = realtimePublisher.acknowledgePublishedEcho;
 
   const handleSharedSceneChange = React.useCallback(
     (
@@ -309,6 +331,7 @@ export function SharedCanvasWorkspace({
       pendingSceneRef.current = nextScene;
       pendingSceneFingerprintRef.current = nextSceneFingerprint;
       setSaveStatus("saving");
+      realtimePublisher.observeLocalSceneChange();
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -318,7 +341,7 @@ export function SharedCanvasWorkspace({
         void flushPendingScene();
       }, 700);
     },
-    [flushPendingScene, isEditable]
+    [flushPendingScene, isEditable, realtimePublisher]
   );
 
   if (status === "loading") {

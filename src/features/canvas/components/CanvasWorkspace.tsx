@@ -13,6 +13,10 @@ import { ConvertTaskDialog } from "@/src/features/canvas/components/ConvertTaskD
 import { ShareCanvasDialog } from "@/src/features/canvas/components/ShareCanvasDialog";
 import { realtimeRepository } from "@/src/features/realtime/realtimeRepository";
 import { useRealtimeElementReceiver } from "@/src/features/realtime/useRealtimeElementReceiver";
+import {
+  type RealtimeElementPublisher,
+  useRealtimeElementPublisher,
+} from "@/src/features/realtime/useRealtimeElementPublisher";
 import { RouteMode } from "@/src/types";
 import { CanvasManager } from "@/src/features/canvas/hooks/useCanvasManager";
 import {
@@ -39,6 +43,12 @@ export function CanvasWorkspace({
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [excalidrawAPI, setExcalidrawAPI] = React.useState<FlowBoardExcalidrawAPI | null>(null);
+  const markPublisherRemoteBaselineRef = React.useRef<
+    RealtimeElementPublisher["markRemoteElementsApplied"] | null
+  >(null);
+  const acknowledgePublisherEchoRef = React.useRef<
+    RealtimeElementPublisher["acknowledgePublishedEcho"] | null
+  >(null);
 
   const {
     canvases,
@@ -65,7 +75,7 @@ export function CanvasWorkspace({
     console.warn("FlowBoard owner realtime receiver unavailable", realtimeError);
   }, []);
 
-  useRealtimeElementReceiver({
+  const realtimeReceiverStatus = useRealtimeElementReceiver({
     enabled: isInitialized && Boolean(activeCanvasId),
     roomKey: activeCanvasId,
     excalidrawAPI,
@@ -73,9 +83,21 @@ export function CanvasWorkspace({
     isProgrammaticUpdateRef,
     onRemoteElementsApplied: (elements, files) => {
       markRemoteElementsApplied(activeCanvasId, elements, files);
+      markPublisherRemoteBaselineRef.current?.(elements);
     },
+    shouldIgnoreIncomingElement: (element) => acknowledgePublisherEchoRef.current?.(element) ?? false,
     onError: handleRealtimeError,
   });
+
+  const realtimePublisher = useRealtimeElementPublisher({
+    enabled: realtimeReceiverStatus === "ready" && isInitialized && Boolean(activeCanvasId),
+    canvasId: activeCanvasId,
+    excalidrawAPI,
+    isProgrammaticUpdateRef,
+    onError: handleRealtimeError,
+  });
+  markPublisherRemoteBaselineRef.current = realtimePublisher.markRemoteElementsApplied;
+  acknowledgePublisherEchoRef.current = realtimePublisher.acknowledgePublishedEcho;
 
   const applyDarkCanvasAppearance = React.useCallback((appState?: unknown) => {
     if (!excalidrawAPI) return;
@@ -136,6 +158,7 @@ export function CanvasWorkspace({
             }
 
             handleSceneChange(elements, flowBoardAppState, files);
+            realtimePublisher.observeLocalSceneChange();
           }}
           UIOptions={{
             canvasActions: {

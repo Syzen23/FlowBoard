@@ -20,6 +20,8 @@ import type {
   RealtimeRoomSnapshot,
   RealtimeUnsubscribe,
 } from "./realtime.types";
+import { diagnoseRealtimeElement } from "./realtimeElementValidation";
+import { logRealtimeElementDebug } from "./realtimeElementDebug";
 
 export const realtimeRepository = {
   joinOwnerRoom(canvasId: string): Promise<JoinRealtimeRoomResult> {
@@ -91,6 +93,7 @@ export const realtimeRepository = {
       (snapshot) => {
         const element = snapshotToRealtimeElement(snapshot);
         if (element) {
+          logRealtimeElementDebug("RTDB CHILD ADDED", element);
           handlers.onAdded(element);
         }
       },
@@ -102,6 +105,7 @@ export const realtimeRepository = {
       (snapshot) => {
         const element = snapshotToRealtimeElement(snapshot);
         if (element) {
+          logRealtimeElementDebug("RTDB CHILD CHANGED", element);
           handlers.onChanged(element);
         }
       },
@@ -148,6 +152,18 @@ export const realtimeRepository = {
 
       const jsonSafeElement = toRealtimeJsonValue(element);
       if (!isRecord(jsonSafeElement) || jsonSafeElement.id !== elementId) {
+        skippedInvalidCount += 1;
+        continue;
+      }
+
+      const diagnostic = diagnoseRealtimeElement(jsonSafeElement);
+      if (diagnostic.issues.length > 0) {
+        console.warn("[RTDB INVALID ELEMENT]", {
+          context: "serialize",
+          id: diagnostic.id,
+          type: diagnostic.type,
+          issues: diagnostic.issues,
+        });
         skippedInvalidCount += 1;
         continue;
       }
